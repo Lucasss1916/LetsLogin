@@ -126,7 +126,11 @@ async function loadAccounts() {
       </div>
       ${a.platform ? `<div class="acc-sub">${esc(a.platform)}</div>` : ''}
       <div class="acc-sub">${esc(a.login_username)}${a.owner_id !== state.user.id ? ` · ${esc(a.owner_username || '')}` : ''}</div>
-      ${a.writable ? '' : '<div class="acc-sub muted">共同访问</div>'}
+      <div class="acc-sub">
+        ${a.writable
+          ? `<button type="button" class="ghost sm acc-edit" data-edit-account="${a.id}">✎ 编辑</button>`
+          : '<span class="muted">共同访问</span>'}
+      </div>
     </div>`).join('')
 }
 
@@ -134,6 +138,10 @@ async function loadAccounts() {
 document.addEventListener('click', async (e) => {
   // 关闭弹层
   if (e.target.matches('[data-close]')) closeModals()
+
+  // 编辑账号按钮优先:它位于账号卡片内部,需先于卡片点击处理
+  const ea = e.target.closest('[data-edit-account]')
+  if (ea) { try { await editAccount(Number(ea.dataset.editAccount)) } catch (err) { toast(err.message, false) } return }
 
   // 账号卡片
   const open = e.target.closest('[data-open]')
@@ -296,15 +304,6 @@ $('btn-delete-account').addEventListener('click', async () => {
   try { await api('DELETE', '/accounts/' + id); toast('已删除'); closeModals(); await loadAccounts() }
   catch (err) { toast(err.message, false) }
   finally { loading(btn, false) }
-})
-
-// 双击卡片进入编辑(个人/管理员)
-document.addEventListener('dblclick', async (e) => {
-  const card = e.target.closest('[data-open]')
-  if (!card) return
-  // 需要知道 writable;再次请求详情
-  const a = await api('GET', '/accounts/' + card.dataset.open)
-  if (a && (a.owner_id === state.user.id || state.user.role === 'admin')) await editAccount(a.id)
 })
 
 // ---------- 用户管理 ----------
