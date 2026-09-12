@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LetsLogin</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <!-- 登录视图 -->
+  <main id="view-login" class="auth-view hidden">
+    <form id="login-form" class="card auth-card">
+      <h1>LetsLogin</h1>
+      <p class="muted">团队密码管理</p>
+      <label>用户名<input id="login-username" autocomplete="username" required /></label>
+      <label>密码<input id="login-password" type="password" autocomplete="current-password" required /></label>
+      <div id="login-error" class="error hidden"></div>
+      <button class="primary" type="submit">登录</button>
+    </form>
+  </main>
+
+  <!-- 首次登录强制改密 -->
+  <main id="view-change-pw" class="auth-view hidden">
+    <form id="change-pw-form" class="card auth-card">
+      <h2>请设置新密码</h2>
+      <p class="muted">首次登录或管理员重置后需修改密码</p>
+      <label>原密码<input id="cp-old" type="password" autocomplete="current-password" required /></label>
+      <label>新密码(至少 8 位)<input id="cp-new" type="password" autocomplete="new-password" required /></label>
+      <div id="cp-error" class="error hidden"></div>
+      <button class="primary" type="submit">确认修改</button>
+    </form>
+  </main>
+
+  <!-- 主应用 -->
+  <main id="view-app" class="app hidden">
+    <header class="topbar">
+      <span class="brand">LetsLogin</span>
+      <div class="top-right">
+        <span id="whoami" class="muted">…</span>
+        <button id="btn-users" class="ghost hidden">用户管理</button>
+        <button id="btn-back-accounts" class="ghost hidden">← 返回账号</button>
+        <button id="btn-logout" class="ghost">退出</button>
+      </div>
+    </header>
+
+    <section id="panel-accounts">
+      <div class="panel-head">
+        <h2>账号</h2>
+        <button id="btn-new-account" class="primary">+ 新增账号</button>
+      </div>
+      <div id="account-list" class="account-list"></div>
+    </section>
+
+    <section id="panel-users" class="hidden">
+      <div class="panel-head">
+        <h2>用户管理</h2>
+        <button id="btn-new-user" class="primary">+ 新增用户</button>
+      </div>
+      <table id="user-table" class="table"></table>
+      <div id="user-placeholder" class="muted hidden"></div>
+    </section>
+  </main>
+
+  <!-- 账号详情弹层 -->
+  <div id="modal-account" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3 id="acc-title">账号</h3>
+        <button class="ghost" data-close>✕</button>
+      </div>
+      <form id="account-form">
+        <input type="hidden" id="acc-id" />
+        <label>名称 *<input id="acc-name" required /></label>
+        <label>平台<input id="acc-platform" placeholder="如 GitHub" /></label>
+        <label>登录名 *<input id="acc-login" required /></label>
+        <label>密码(留空表示不修改)<input id="acc-password" type="password" /></label>
+        <label>2FA Secret<input id="acc-totp" placeholder="Base32,留空忽略" /></label>
+        <label>备注<textarea id="acc-note" rows="2"></textarea></label>
+        <label>可见性
+          <select id="acc-visibility">
+            <option value="private">仅自己(私有)</option>
+            <option value="all">全体成员</option>
+            <option value="selected">指定成员</option>
+          </select>
+        </label>
+        <label id="share-row" class="hidden">共享给(逗号分隔的用户ID)
+          <input id="acc-share" placeholder="如 2,3" />
+        </label>
+        <div id="acc-error" class="error hidden"></div>
+        <div class="modal-actions">
+          <button type="button" class="ghost danger" id="btn-delete-account" hidden>删除</button>
+          <button type="submit" class="primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 账号查看(显示明文/动态码)弹层 -->
+  <div id="modal-view" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3 id="view-title">账号</h3>
+        <button class="ghost" data-close>✕</button>
+      </div>
+      <dl class="details">
+        <dt>平台</dt><dd id="view-platform"></dd>
+        <dt>登录名</dt><dd id="view-login"></dd>
+        <dt>密码</dt>
+        <dd>
+          <span id="view-password" class="secret">••••••••</span>
+          <button type="button" class="ghost sm" id="btn-reveal">显示</button>
+          <button type="button" class="ghost sm" id="btn-copy-pw" title="复制密码">⧉</button>
+        </dd>
+        <dt>2FA 动态码</dt>
+        <dd>
+          <span id="view-totp" class="totp">—</span>
+          <span id="view-remaining" class="muted"></span>
+          <button type="button" class="ghost sm" id="btn-copy-totp" title="复制动态码">⧉</button>
+        </dd>
+        <dt>备注</dt><dd id="view-note"></dd>
+      </dl>
+      <div id="session-area">
+        <div id="session-active" class="hidden">⏳ 已签出,正在进行占用</div>
+        <button type="button" class="primary" id="btn-session-start">签出(开始占用)</button>
+        <button type="button" class="ghost danger hidden" id="btn-session-end">签入(结束占用)</button>
+        <button type="button" class="danger hidden" id="btn-force-end">管理员强制签入</button>
+      </div>
+      <div id="view-error" class="error hidden"></div>
+    </div>
+  </div>
+
+  <!-- 用户表单弹层 -->
+  <div id="modal-user" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3 id="user-title">用户</h3>
+        <button class="ghost" data-close>✕</button>
+      </div>
+      <form id="user-form">
+        <input type="hidden" id="u-id" />
+        <label id="u-username-row">用户名 *<input id="u-username" required /></label>
+        <label>密码(创建或重置,至少 8 位)<input id="u-password" type="password" /></label>
+        <label>角色
+          <select id="u-role"><option value="user">普通用户</option><option value="admin">管理员</option></select>
+        </label>
+        <div id="u-error" class="error hidden"></div>
+        <div class="modal-actions">
+          <button type="button" class="ghost danger" id="btn-disable-user" hidden>禁用/启用</button>
+          <button type="submit" class="primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

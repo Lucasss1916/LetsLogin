@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: letslogin
+      POSTGRES_USER: letslogin
+      POSTGRES_PASSWORD: letslogin_pass
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U letslogin"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build: ./server
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://letslogin:letslogin_pass@db:5432/letslogin
+      JWT_SECRET: ${JWT_SECRET}
+      SECRETS_KEY: ${SECRETS_KEY}
+      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-admin123}
+      SESSION_TIMEOUT_MINUTES: 30
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./web
+    ports:
+      - "8080:80"
+    depends_on:
+      - server
+
+volumes:
+  pgdata:

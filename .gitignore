@@ -1,0 +1,18 @@
+# 环境变量与密钥 —— 严禁提交
+.env
+.env.local
+*.env
+
+# 依赖
+node_modules/
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# 日志
+*.log
+npm-debug.log*
