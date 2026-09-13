@@ -31,6 +31,38 @@ function canWrite(acc, user) {
   return acc && (acc.owner_id === user.id || user.role === 'admin')
 }
 
+// 账号关联的游戏(含段位),按账号 id 分组;一个账号可上多个游戏并各自标记段位
+async function gamesFor(accountIds) {
+  if (!accountIds.length) return new Map()
+  const { rows } = await pool.query(
+    `SELECT ag.id, ag.account_id, ag.game_id, ag.rank, g.name AS game_name
+     FROM account_games ag JOIN games g ON g.id = ag.game_id
+     WHERE ag.account_id = ANY($1) ORDER BY ag.id`, [accountIds])
+  const m = new Map()
+  for (const row of rows) {
+    if (!m.has(row.account_id)) m.set(row.account_id, [])
+    m.get(row.account_id).push({ id: row.id, gameId: row.game_id, gameName: row.game_name, rank: row.rank })
+  }
+  return m
+}
+
+// 校验并规整提交的游戏列表,返回:
+//   - 合法数组(供入库) — 未提交 games 时返回 [] 表示无游戏改动
+//   - null        —— 命中非法游戏 id 时已发送 400 响应,调用方应直接 return
+async function validateGames(games, res) {
+  if (!Array.isArray(games)) return []
+  const gids = [...new Set(games.map(g => g && g.gameId).filter(Boolean))]
+  if (gids.length) {
+    const { rows } = await pool.query('SELECT id FROM games WHERE id = ANY($1)', [gids])
+    const valid = new Set(rows.map(x => x.id))
+    for (const g of games) if (g && g.gameId && !valid.has(g.gameId)) {
+      res.status(400).json({ error: '含无效的游戏' })
+      return null
+    }
+  }
+  return games.filter(g => g && g.gameId)
+}
+
 // 账号列表(仅元数据,不含密码明文)
 r.get('/', async (_req, res) => {
   const { rows } = await pool.query(
@@ -40,8 +72,9 @@ r.get('/', async (_req, res) => {
      WHERE a.owner_id = $1 OR $2 = 'admin' OR a.visibility = 'all' OR
            a.id IN (SELECT account_id FROM account_shares WHERE user_id = $1)
      ORDER BY a.id`, [_req.user.id, _req.user.role])
-  // 标记当前用户是否可写(用于前端隐藏操作按钮)
-  const accounts = rows.map(a => ({ ...a, writable: a.owner_id === _req.user.id || _req.user.role === 'admin' }))
+  // 标记当前用户是否可写(用于前端隐藏操作按钮)+ 关联游戏与段位
+  const gm = await gamesFor(rows.map(a => a.id))
+  const accounts = rows.map(a => ({ ...a, writable: a.owner_id === _req.user.id || _req.user.role === 'admin', games: gm.get(a.id) || [] }))
   res.json({ accounts })
 })
 
@@ -58,11 +91,13 @@ r.get('/:id', async (req, res) => {
      ORDER BY s.started_at LIMIT 1`, [acc.id])
   const activeSession = sres.rows[0] || null
   await audit(req.user.id, 'view_account', `account:${acc.id}`, { name: acc.name })
+  const gm = await gamesFor([acc.id])
   res.json({
     id: acc.id, name: acc.name, platform: acc.platform, login_username: acc.login_username,
     password: acc.password_enc ? decryptSecret(acc.password_enc) : null,
     note: acc.note, visibility: acc.visibility, disabled: acc.disabled,
     owner_id: acc.owner_id, owner_username: acc.owner_username,
+    games: gm.get(acc.id) || [],
     totp: totp.code, totp_remaining: totp.remaining,
     activeSession: activeSession ? { id: activeSession.id, holderId: activeSession.user_id, holder: activeSession.holder } : null,
   })
@@ -70,7 +105,7 @@ r.get('/:id', async (req, res) => {
 
 // 创建账号
 r.post('/', async (req, res) => {
-  const { name, platform = '', loginUsername, password, totpSecret = '', note = '', visibility = 'private', sharedUserIds } = req.body || {}
+  const { name, platform = '', loginUsername, password, totpSecret = '', note = '', visibility = 'private', sharedUserIds, games } = req.body || {}
   let shareIds = []
   if (!name || !loginUsername || !password)
     return res.status(400).json({ error: '名称、登录名、密码必填' })
@@ -81,6 +116,8 @@ r.post('/', async (req, res) => {
   if (Array.isArray(sharedUserIds) && visibility === 'selected') shareIds = sharedUserIds
   if (visibility === 'selected' && shareIds.length === 0)
     return res.status(400).json({ error: '选择指定可见需要至少共享给一个用户' })
+  const gameRows = await validateGames(games, res) // 非法时已在内部响应
+  if (gameRows === null) return
 
   const password_enc = encryptSecret(password)
   const totp_enc = totpSecret ? encryptSecret(totpSecret) : null
@@ -98,8 +135,11 @@ r.post('/', async (req, res) => {
       for (const uid of ids) await client.query(
         'INSERT INTO account_shares (account_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, uid])
     }
+    for (const g of gameRows) await client.query(
+      'INSERT INTO account_games (account_id, game_id, rank) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
+      [id, g.gameId, (g.rank || '').trim() || '未定级'])
     await client.query('COMMIT')
-    await audit(req.user.id, 'create_account', `account:${id}`, { name, visibility })
+    await audit(req.user.id, 'create_account', `account:${id}`, { name, visibility, games: gameRows.length })
     res.json({ id })
   } catch (e) {
     await client.query('ROLLBACK')
@@ -113,9 +153,11 @@ r.post('/', async (req, res) => {
 r.patch('/:id', async (req, res) => {
   const acc = await accountForId(Number(req.params.id), req.user)
   if (!canWrite(acc, req.user)) return res.status(403).json({ error: '无权修改该账号' })
-  const { name, platform, note, password, totpSecret, visibility, disabled, sharedUserIds } = req.body || {}
+  const { name, platform, note, password, totpSecret, visibility, disabled, sharedUserIds, games } = req.body || {}
   if (visibility && !['private', 'all', 'selected'].includes(visibility))
     return res.status(400).json({ error: '可见性非法' })
+  const gameRows = await validateGames(games, res)
+  if (gameRows === null) return
 
   const sets = []
   const vals = []
@@ -148,6 +190,13 @@ r.patch('/:id', async (req, res) => {
     } else {
       await client.query('DELETE FROM account_shares WHERE account_id=$1', [acc.id])
     }
+    // 游戏列表:提交则整体覆盖(增删游戏由前端以整份列表为准)
+    if (Array.isArray(games)) {
+      await client.query('DELETE FROM account_games WHERE account_id=$1', [acc.id])
+      for (const g of gameRows) await client.query(
+        'INSERT INTO account_games (account_id, game_id, rank) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
+        [acc.id, g.gameId, (g.rank || '').trim() || '未定级'])
+    }
     await client.query('COMMIT')
   } catch (e) {
     await client.query('ROLLBACK')
@@ -173,12 +222,18 @@ r.post('/:id/sessions', async (req, res) => {
   const acc = await accountForId(Number(req.params.id), req.user)
   if (!canRead(acc, req.user)) return res.status(403).json({ error: '无权使用该账号' })
   if (acc.disabled) return res.status(400).json({ error: '该账号已被停用' })
+  // 上号的游戏(account_games.id):可选,多游戏账号由前端挑选,需属于该账号
+  const gameId = req.body?.gameId ? Number(req.body.gameId) : null
+  if (gameId) {
+    const ag = await pool.query('SELECT id FROM account_games WHERE id=$1 AND account_id=$2', [gameId, acc.id])
+    if (!ag.rows.length) return res.status(400).json({ error: '无效的游戏选择' })
+  }
   // 原子占用:依赖 uq_sessions_active 唯一约束(并发下仅一条成功),消除先查后插的竞态
   const ins = await pool.query(
-    `INSERT INTO sessions (account_id, user_id)
-     SELECT $1, $2
+    `INSERT INTO sessions (account_id, user_id, account_game_id)
+     SELECT $1, $2, $3
      WHERE NOT EXISTS (SELECT 1 FROM sessions WHERE account_id = $1 AND ended_at IS NULL)
-     RETURNING id`, [acc.id, req.user.id])
+     RETURNING id`, [acc.id, req.user.id, gameId])
   if (!ins.rows.length) {
     const holder = await pool.query(
       `SELECT u.username FROM sessions s JOIN users u ON u.id = s.user_id

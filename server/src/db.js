@@ -53,7 +53,50 @@ export async function migrate() {
       meta JSONB DEFAULT '{}',
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    -- 游戏目录:固定游戏列表 + 段位阶梯定义(rank_tiers 形如 [{"tier":"白银","sub":4},...],
+    -- sub 为小段数量,0 表示该段位不分小段,如大师/猎杀者)
+    CREATE TABLE IF NOT EXISTS games (
+      id SERIAL PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      rank_tiers JSONB NOT NULL DEFAULT '[]'
+    );
+    -- 账号关联的游戏:一个账号可上多个游戏,各自标记当前段位(rank 为展示标签,如 "白银2")
+    CREATE TABLE IF NOT EXISTS account_games (
+      id SERIAL PRIMARY KEY,
+      account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+      game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+      rank TEXT NOT NULL DEFAULT '未定级',
+      UNIQUE (account_id, game_id)
+    );
   `)
+
+  // 上号会话记录所选游戏(account_games),账号/游戏被删则置空
+  await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS account_game_id INTEGER REFERENCES account_games(id) ON DELETE SET NULL`)
+
+  // 修正 sessions→accounts 外键:删除账号时应级联清掉其占用/历史会话(否则 ON DELETE 会被 FK 拦截)
+  await pool.query(`ALTER TABLE sessions DROP CONSTRAINT IF EXISTS sessions_account_id_fkey`)
+  await pool.query(
+    `ALTER TABLE sessions ADD CONSTRAINT sessions_account_id_fkey
+       FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE`)
+
+  // 预置游戏目录(目前只需 Apex 示例,空表才写入)
+  const { rows: gameCount } = await pool.query('SELECT COUNT(*)::int AS n FROM games')
+  if (gameCount[0].n === 0) {
+    await pool.query(
+      `INSERT INTO games (name, rank_tiers) VALUES ($1, $2)`,
+      ['Apex 英雄', JSON.stringify([
+        { tier: '入门', sub: 0 },
+        { tier: '青铜', sub: 4 },
+        { tier: '白银', sub: 4 },
+        { tier: '黄金', sub: 4 },
+        { tier: '白金', sub: 4 },
+        { tier: '钻石', sub: 4 },
+        { tier: '大师', sub: 0 },
+        { tier: '猎杀者', sub: 0 },
+      ])]
+    )
+    console.log('[migrate] 已预置游戏: Apex 英雄(含段位阶梯)')
+  }
 
   // 旧表兼容:新增 token 版本号,用于改密/重置后吊销旧 JWT
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 1`)

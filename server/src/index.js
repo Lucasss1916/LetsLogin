@@ -3,6 +3,13 @@ import { migrate } from './db.js'
 import authRoutes from './routes/auth.js'
 import userRoutes from './routes/users.js'
 import accountRoutes from './routes/accounts.js'
+import gameRoutes from './routes/games.js'
+
+// Express 4 不会捕获 async handler 里被 reject 的 Promise,若放任不管,
+// 任何一次数据库错误都会导致进程退出(整服务不可用)。这里兜底:记录错误而非退出。
+process.on('unhandledRejection', (err) => {
+  console.error('[unhandledRejection]', err)
+})
 
 const app = express()
 import { config } from './config.js'
@@ -20,6 +27,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true }))
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/accounts', accountRoutes)
+app.use('/api/games', gameRoutes)
 
 app.use((err, req, res, next) => {
   console.error(err)

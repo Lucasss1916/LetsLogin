@@ -92,8 +92,55 @@ function renderUser() {
 async function bootApp() {
   renderUser()
   if (state.user.role === 'admin') show('btn-users'); else hide('btn-users')
+  await loadGames()
   await loadAccounts()
 }
+
+let allGames = []
+async function loadGames() {
+  const { games } = await api('GET', '/games'); allGames = games
+}
+// 根据某游戏的段位阶梯生成下拉选项(v 为存储的段位标签,空=未定级)
+function rankOptions(game) {
+  const opts = [{ v: '', label: '未定级' }]
+  if (!game) return opts
+  for (const t of game.rank_tiers || []) {
+    if (t.sub > 0) { for (let i = 1; i <= t.sub; i++) opts.push({ v: `${t.tier}${i}`, label: `${t.tier}${i}` }) }
+    else opts.push({ v: t.tier, label: t.tier })
+  }
+  return opts
+}
+
+// 账号表单中待编辑的游戏行数据
+let formGames = []
+function renderFormGames() {
+  const box = $('acc-games')
+  if (!box) return
+  box.innerHTML = formGames.map((g, i) => `
+    <div class="ag-row">
+      <select class="ag-game" data-i="${i}">
+        ${allGames.map(x => `<option value="${x.id}" ${g.gameId === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}
+      </select>
+      <select class="ag-rank" data-i="${i}">
+        ${rankOptions(allGames.find(x => x.id === g.gameId)).map(o => `<option value="${esc(o.v)}" ${g.rank === o.v ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}
+      </select>
+      <button type="button" class="ghost sm ag-remove" data-i="${i}">✕</button>
+    </div>`).join('')
+}
+$('btn-add-game').addEventListener('click', () => {
+  formGames.push({ gameId: allGames[0]?.id || null, rank: '' })
+  renderFormGames()
+})
+$('acc-games').addEventListener('change', (e) => {
+  const i = e.target.dataset.i
+  if (i === undefined) return
+  if (e.target.classList.contains('ag-game')) {
+    formGames[i].gameId = Number(e.target.value); formGames[i].rank = ''
+    renderFormGames() // 重建段位下拉
+  } else if (e.target.classList.contains('ag-rank')) {
+    formGames[i].rank = e.target.value
+  }
+})
 
 let allUsers = []
 async function loadUsers() {
@@ -126,6 +173,7 @@ async function loadAccounts() {
       </div>
       ${a.platform ? `<div class="acc-sub">${esc(a.platform)}</div>` : ''}
       <div class="acc-sub">${esc(a.login_username)}${a.owner_id !== state.user.id ? ` · ${esc(a.owner_username || '')}` : ''}</div>
+      ${a.games && a.games.length ? `<div class="acc-games">${a.games.map(g => `<span class="badge">${esc(g.gameName)} · ${esc(g.rank)}</span>`).join('')}</div>` : ''}
       <div class="acc-sub">
         ${a.writable
           ? `<button type="button" class="ghost sm acc-edit" data-edit-account="${a.id}">✎ 编辑</button>`
@@ -138,6 +186,10 @@ async function loadAccounts() {
 document.addEventListener('click', async (e) => {
   // 关闭弹层
   if (e.target.matches('[data-close]')) closeModals()
+
+  // 账号表单游戏行移除
+  const rem = e.target.closest('.ag-remove')
+  if (rem) { formGames.splice(Number(rem.dataset.i), 1); renderFormGames(); return }
 
   // 编辑账号按钮优先:它位于账号卡片内部,需先于卡片点击处理
   const ea = e.target.closest('[data-edit-account]')
@@ -165,6 +217,16 @@ async function openAccount(id) {
     $('view-password').textContent = '••••••••'; $('view-password').dataset.revealed = '0'
     $('btn-reveal').textContent = '显示'
     $('view-note').textContent = a.note || '—'
+    // 游戏与段位 + 上号游戏选择(有游戏时才显示)
+    const games = a.games || []
+    $('view-games').innerHTML = games.length
+      ? games.map(g => `<span class="badge">${esc(g.gameName)} · ${esc(g.rank)}</span>`).join('')
+      : '<span class="muted">未绑定游戏</span>'
+    ;(function() {
+      const row = $('session-game-row'), sg = $('session-game')
+      row.classList.toggle('hidden', games.length === 0)
+      sg.innerHTML = games.map(g => `<option value="${g.id}">${esc(g.gameName)}(${esc(g.rank)})</option>`).join('')
+    })()
     renderTotp(a.totp, a.totp_remaining)
     // 会话区: 依据后端返回的当前占用状态渲染
     renderSession(a.activeSession)
@@ -238,8 +300,10 @@ $('btn-copy-totp').addEventListener('click', () => {
 
 $('btn-session-start').addEventListener('click', async () => {
   const btn = $('btn-session-start'); loading(btn, true)
+  const sg = $('session-game')
+  const gameId = sg.options.length ? Number(sg.value) : null
   try {
-    const r = await api('POST', `/accounts/${state.viewAcc.id}/sessions`)
+    const r = await api('POST', `/accounts/${state.viewAcc.id}/sessions`, { gameId })
     hide('btn-session-start'); show('btn-session-end'); show('session-active')
     $('session-active').textContent = `⏳ 已占用${state.viewAcc.name}(${r.expiresInMinutes} 分钟超时)`
   } catch (err) { toast(err.message, false) }
@@ -258,6 +322,7 @@ $('btn-new-account').addEventListener('click', () => {
   $('account-form').reset(); $('acc-id').value = ''
   $('acc-title').textContent = '新增账号'; $('btn-delete-account').hidden = true
   $('acc-password').setAttribute('required', ''); $('acc-password').placeholder = ''
+  formGames = []; renderFormGames()
   hide('acc-error'); show('modal-account')
 })
 async function editAccount(id) {
@@ -268,6 +333,8 @@ async function editAccount(id) {
   $('acc-password').placeholder = '留空不修改'; $('acc-totp').value = ''; $('acc-note').value = a.note || ''
   $('acc-visibility').value = a.visibility
   $('acc-share').value = ''
+  formGames = (a.games || []).map(g => ({ gameId: g.gameId, rank: g.rank || '' }))
+  renderFormGames()
   if (a.visibility === 'selected') show('share-row'); else hide('share-row')
   $('btn-delete-account').hidden = false; hide('acc-error'); show('modal-account')
 }
@@ -290,6 +357,7 @@ $('account-form').addEventListener('submit', async (e) => {
   if (payload.visibility === 'selected') {
     payload.sharedUserIds = $('acc-share').value.split(',').map(s => Number(s.trim())).filter(Boolean)
   }
+  payload.games = formGames.filter(g => g.gameId).map(g => ({ gameId: g.gameId, rank: g.rank }))
   try {
     if (id) { await api('PATCH', '/accounts/' + id, payload); toast('已保存') }
     else { await api('POST', '/accounts', payload); toast('已创建') }

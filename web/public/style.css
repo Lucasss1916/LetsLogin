@@ -78,6 +78,13 @@ button[disabled]{opacity:.5;cursor:not-allowed}
 .totp{font-size:26px;font-weight:700;letter-spacing:3px;font-family:ui-monospace,monospace;color:var(--ok)}
 .totp.warn{color:var(--err)}
 
+/* 游戏与段位 */
+.acc-games{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+.details dd.acc-games{margin-top:0}
+.ag-row{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+.ag-row select{flex:1;min-width:0}
+#session-game-row select{width:100%}
+
 /* toast */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--panel2);
   border:1px solid var(--line);border-radius:10px;padding:12px 18px;z-index:100;box-shadow:0 6px 24px rgba(0,0,0,.4)}

@@ -76,6 +76,10 @@
         <label>密码(留空表示不修改)<input id="acc-password" type="password" /></label>
         <label>2FA Secret<input id="acc-totp" placeholder="Base32,留空忽略" /></label>
         <label>备注<textarea id="acc-note" rows="2"></textarea></label>
+        <label>游戏与段位
+          <div id="acc-games"></div>
+          <button type="button" class="ghost sm" id="btn-add-game">+ 添加游戏</button>
+        </label>
         <label>可见性
           <select id="acc-visibility">
             <option value="private">仅自己(私有)</option>
@@ -118,8 +122,12 @@
           <button type="button" class="ghost sm" id="btn-copy-totp" title="复制动态码">⧉</button>
         </dd>
         <dt>备注</dt><dd id="view-note"></dd>
+        <dt>游戏 / 段位</dt><dd id="view-games" class="acc-games"></dd>
       </dl>
       <div id="session-area">
+        <label id="session-game-row" class="hidden">上号游戏
+          <select id="session-game"></select>
+        </label>
         <div id="session-active" class="hidden">⏳ 已签出,正在进行占用</div>
         <button type="button" class="primary" id="btn-session-start">签出(开始占用)</button>
         <button type="button" class="ghost danger hidden" id="btn-session-end">签入(结束占用)</button>
