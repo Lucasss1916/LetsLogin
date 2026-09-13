@@ -3,38 +3,54 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Let's Log !n</title>
+  <title>Let's Log !n // CYBER TERMINAL</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
+  <!-- 赛博背景特效层 -->
+  <div class="cyber-bg" aria-hidden="true">
+    <div class="cyber-grid"></div>
+    <div class="cyber-vignette"></div>
+    <div class="cyber-scanlines"></div>
+  </div>
+
   <!-- 登录视图 -->
   <main id="view-login" class="auth-view hidden">
     <form id="login-form" class="card auth-card">
-      <h1>Let's Log !n</h1>
-      <p class="muted">团队密码管理</p>
-      <label>用户名<input id="login-username" autocomplete="username" required /></label>
-      <label>密码<input id="login-password" type="password" autocomplete="current-password" required /></label>
+      <div class="auth-brand-wrap">
+        <div class="cyber-badge-top">[ SECURE TERMINAL ]</div>
+        <h1>Let's Log !n</h1>
+        <p class="muted">// 团队密码与密钥中枢</p>
+      </div>
+      <label><span class="label-txt">用户名</span><input id="login-username" autocomplete="username" required placeholder="USERNAME" /></label>
+      <label><span class="label-txt">密码</span><input id="login-password" type="password" autocomplete="current-password" required placeholder="PASSWORD" /></label>
       <div id="login-error" class="error hidden"></div>
-      <button class="primary" type="submit">登录</button>
+      <button class="primary" type="submit">ACCESS // 登录</button>
     </form>
   </main>
 
   <!-- 首次登录强制改密 -->
   <main id="view-change-pw" class="auth-view hidden">
     <form id="change-pw-form" class="card auth-card">
-      <h2>请设置新密码</h2>
-      <p class="muted">首次登录或管理员重置后需修改密码</p>
-      <label>原密码<input id="cp-old" type="password" autocomplete="current-password" required /></label>
-      <label>新密码(至少 8 位)<input id="cp-new" type="password" autocomplete="new-password" required /></label>
+      <div class="auth-brand-wrap">
+        <div class="cyber-badge-top">[ SECURITY NOTICE ]</div>
+        <h2>重置访问密钥</h2>
+        <p class="muted">// 首次登录或管理员重置后需修改密码</p>
+      </div>
+      <label><span class="label-txt">原密码</span><input id="cp-old" type="password" autocomplete="current-password" required placeholder="CURRENT KEY" /></label>
+      <label><span class="label-txt">新密码(至少 8 位)</span><input id="cp-new" type="password" autocomplete="new-password" required placeholder="NEW ACCESS KEY" /></label>
       <div id="cp-error" class="error hidden"></div>
-      <button class="primary" type="submit">确认修改</button>
+      <button class="primary" type="submit">UPDATE // 确认修改</button>
     </form>
   </main>
 
   <!-- 主应用 -->
   <main id="view-app" class="app hidden">
     <header class="topbar">
-      <span class="brand">Let's Log !n</span>
+      <div class="brand-group">
+        <span class="brand">Let's Log !n</span>
+        <span class="cyber-badge-inline">ONLINE</span>
+      </div>
       <div class="top-right">
         <span id="whoami" class="muted">…</span>
         <button id="btn-users" class="ghost hidden">用户管理</button>
@@ -70,24 +86,24 @@
       </div>
       <form id="account-form">
         <input type="hidden" id="acc-id" />
-        <label>名称 *<input id="acc-name" required /></label>
-        <label>平台<input id="acc-platform" placeholder="如 GitHub" /></label>
-        <label>登录名 *<input id="acc-login" required /></label>
-        <label>密码(留空表示不修改)<input id="acc-password" type="password" /></label>
-        <label>2FA Secret<input id="acc-totp" placeholder="Base32,留空忽略" /></label>
-        <label>备注<textarea id="acc-note" rows="2"></textarea></label>
-        <label>游戏与段位
+        <label><span class="label-txt">名称 *</span><input id="acc-name" required placeholder="如 Google / AWS" /></label>
+        <label><span class="label-txt">平台</span><input id="acc-platform" placeholder="如 GitHub / Steam" /></label>
+        <label><span class="label-txt">登录名 *</span><input id="acc-login" required placeholder="如 user@domain.com" /></label>
+        <label><span class="label-txt">密码 (留空表示不修改)</span><input id="acc-password" type="password" /></label>
+        <label><span class="label-txt">2FA Secret</span><input id="acc-totp" placeholder="Base32, 留空忽略" /></label>
+        <label><span class="label-txt">备注</span><textarea id="acc-note" rows="2" placeholder="备注信息..."></textarea></label>
+        <label><span class="label-txt">游戏与段位</span>
           <div id="acc-games"></div>
           <button type="button" class="ghost sm" id="btn-add-game">+ 添加游戏</button>
         </label>
-        <label>可见性
+        <label><span class="label-txt">可见性</span>
           <select id="acc-visibility">
             <option value="private">仅自己(私有)</option>
             <option value="all">全体成员</option>
             <option value="selected">指定成员</option>
           </select>
         </label>
-        <label id="share-row" class="hidden">共享给(逗号分隔的用户ID)
+        <label id="share-row" class="hidden"><span class="label-txt">共享给 (逗号分隔的用户ID)</span>
           <input id="acc-share" placeholder="如 2,3" />
         </label>
         <div id="acc-error" class="error hidden"></div>
@@ -125,7 +141,7 @@
         <dt>游戏 / 段位</dt><dd id="view-games" class="acc-games"></dd>
       </dl>
       <div id="session-area">
-        <label id="session-game-row" class="hidden">上号游戏
+        <label id="session-game-row" class="hidden"><span class="label-txt">上号游戏</span>
           <select id="session-game"></select>
         </label>
         <div id="session-active" class="hidden">⏳ 已签出,正在进行占用</div>
@@ -146,9 +162,9 @@
       </div>
       <form id="user-form">
         <input type="hidden" id="u-id" />
-        <label id="u-username-row">用户名 *<input id="u-username" required /></label>
-        <label>密码(创建或重置,至少 8 位)<input id="u-password" type="password" /></label>
-        <label>角色
+        <label id="u-username-row"><span class="label-txt">用户名 *</span><input id="u-username" required /></label>
+        <label><span class="label-txt">密码 (创建或重置, 至少 8 位)</span><input id="u-password" type="password" /></label>
+        <label><span class="label-txt">角色</span>
           <select id="u-role"><option value="user">普通用户</option><option value="admin">管理员</option></select>
         </label>
         <div id="u-error" class="error hidden"></div>
