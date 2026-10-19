@@ -16,3 +16,7 @@ Thumbs.db
 # 日志
 *.log
 npm-debug.log*
+
+# Python 字节码缓存(桌面工具 apex_cfg_tool)
+__pycache__/
+*.pyc
