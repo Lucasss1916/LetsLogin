@@ -53,6 +53,8 @@
       </div>
       <div class="top-right">
         <span id="whoami" class="muted">…</span>
+        <button id="btn-apex" class="ghost">Apex 轮换</button>
+        <button id="btn-apexcfg" class="ghost">Apex 配置</button>
         <button id="btn-users" class="ghost hidden">用户管理</button>
         <button id="btn-back-accounts" class="ghost hidden">← 返回账号</button>
         <button id="btn-logout" class="ghost">退出</button>
@@ -76,6 +78,67 @@
         <table id="user-table" class="table"></table>
       </div>
       <div id="user-placeholder" class="muted hidden"></div>
+    </section>
+
+    <section id="panel-apex" class="hidden">
+      <div class="panel-head">
+        <h2>Apex 地图轮换</h2>
+        <span id="apex-source" class="muted"></span>
+      </div>
+      <div id="rotation-grid" class="rotation-grid"></div>
+      <div id="apex-error" class="error hidden"></div>
+    </section>
+
+    <!-- Apex 配置工具(备份/恢复/分享) -->
+    <section id="panel-apexcfg" class="hidden">
+      <div class="panel-head">
+        <h2>Apex 配置工具</h2>
+        <a class="primary cfg-dl-anchor" href="/downloads/apex_cfg_tool.py" download>⇩ 下载 apex_cfg_tool.py</a>
+      </div>
+
+      <div class="cfg-grid">
+        <div class="card cfg-usage">
+          <h3>备份 / 恢复(本机)</h3>
+          <ol class="cfg-steps">
+            <li>下载工具到任意目录(仅需 Python 3.8+,零第三方依赖)</li>
+            <li>打开 PowerShell / 终端,进入该目录</li>
+            <li>备份当前配置:<code>python apex_cfg_tool.py backup</code></li>
+            <li>查看备份列表:<code>python apex_cfg_tool.py list</code></li>
+            <li>恢复备份:<code>python apex_cfg_tool.py restore apex-backup-XXXX.zip</code></li>
+          </ol>
+          <p class="muted">工具只读写 <code>Saved Games\Respawn\Apex\local</code> 下的 <code>*.cfg / *.txt</code> 配置文件(灵敏度、键位、画质);每次恢复前会自动给当前状态打安全包,可随时再恢复回去。</p>
+        </div>
+
+        <div class="card cfg-publish">
+          <h3>分享我的配置</h3>
+          <form id="cfg-publish-form">
+            <label><span class="label-txt">配置文件 (.apexcfg)</span>
+              <input id="cfg-file" type="file" accept=".apexcfg,.json,application/json" required />
+            </label>
+            <div id="cfg-file-summary" class="cfg-summary hidden"></div>
+            <label><span class="label-txt">标题 *</span>
+              <input id="cfg-title" maxlength="60" required placeholder="如 1.8 灵敏度 · 平底锅键位" />
+            </label>
+            <label><span class="label-txt">备注</span>
+              <textarea id="cfg-notes" rows="2" maxlength="300" placeholder="灵敏度 / 键位 / 画质说明…"></textarea>
+            </label>
+            <div id="cfg-publish-error" class="error hidden"></div>
+            <button class="primary" type="submit">发布到分享广场</button>
+          </form>
+          <p class="muted">先在本地运行 <code>python apex_cfg_tool.py export -o 我的配置.apexcfg</code> 导出分享文件,再在这里上传。别人下载后用 <code>import</code> 命令一键应用。</p>
+        </div>
+      </div>
+
+      <div class="panel-head cfg-square-head">
+        <h3>分享广场</h3>
+        <input id="cfg-search" class="cfg-search" autocomplete="off" placeholder="搜索标题 / 备注 / 灵敏度…" />
+      </div>
+      <div id="cfg-list" class="rotation-grid"></div>
+      <div class="cfg-more-row">
+        <span id="cfg-empty" class="muted hidden"></span>
+        <button id="cfg-more" class="ghost hidden">加载更多</button>
+      </div>
+      <div id="cfg-error" class="error hidden"></div>
     </section>
   </main>
 
@@ -126,7 +189,7 @@
       </div>
       <dl class="details">
         <dt>平台</dt><dd id="view-platform"></dd>
-        <dt>登录名</dt><dd id="view-login"></dd>
+        <dt>登录名</dt><dd id="view-login-name"></dd>
         <dt>密码</dt>
         <dd>
           <span id="view-password" class="secret">••••••••</span>

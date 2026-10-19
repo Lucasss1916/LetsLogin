@@ -111,6 +111,24 @@ export async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts(username, failed_at DESC);
   `)
 
+  // Apex 配置分享广场:payload 存 .apexcfg 全文(压缩 JSON 文本),preview 只存卡片摘要
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS apex_configs (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      preview JSONB NOT NULL DEFAULT '{}',
+      payload TEXT NOT NULL,
+      payload_bytes INTEGER NOT NULL DEFAULT 0,
+      file_count INTEGER NOT NULL DEFAULT 0,
+      downloads INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_apex_configs_created ON apex_configs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_apex_configs_user ON apex_configs(user_id, created_at DESC);
+  `)
+
   const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM users')
   if (rows[0].n === 0) {
     const hash = await bcrypt.hash(config.adminInitialPassword, 10)

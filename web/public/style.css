@@ -1133,3 +1133,320 @@ button[disabled] {
     font-size: 13px;
   }
 }
+/* ==========================================================================
+   Apex 地图轮换 (Apex Map Rotation)
+   ========================================================================== */
+#apex-source {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+.rotation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+  gap: 16px;
+}
+
+.rotation-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--cyan);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+}
+
+/* 地图横幅:图片 cover 铺满,无图时用霓虹渐变占位 */
+.rotation-banner {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  min-height: 150px;
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.12), rgba(255, 0, 85, 0.10) 55%, rgba(5, 255, 161, 0.08));
+  border-bottom: 1px solid var(--line);
+}
+
+.rotation-banner img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(1.1) contrast(1.05);
+}
+
+/* 底部文字渐晕,保证地图名在亮图上可读 */
+.rotation-banner::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 65%;
+  background: linear-gradient(180deg, transparent, rgba(7, 9, 14, 0.92));
+  pointer-events: none;
+}
+
+.rotation-mode {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  font-family: var(--font-mono);
+  letter-spacing: 1px;
+}
+
+.rotation-name {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 10px;
+  z-index: 2;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: var(--text-bright);
+  text-shadow: 0 0 12px rgba(0, 240, 255, 0.65), 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.rotation-event {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  z-index: 2;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--yellow);
+  text-shadow: var(--yellow-glow);
+}
+
+.rotation-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px 16px;
+}
+
+.rotation-countdown {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rotation-countdown .label-txt {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+
+.rotation-countdown strong {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--cyan);
+  text-shadow: var(--cyan-glow);
+}
+
+.rotation-bar {
+  height: 6px;
+  background: rgba(0, 240, 255, 0.08);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.rotation-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--green));
+  box-shadow: var(--cyan-glow);
+  transition: width 1s linear;
+}
+
+.rotation-next {
+  color: var(--muted);
+  font-size: 13px;
+  display: flex;
+  gap: 6px;
+}
+
+.rotation-next b {
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* 中屏与平板 */
+@media (max-width: 768px) {
+  .rotation-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+    gap: 12px;
+  }
+}
+
+/* 手机端 */
+@media (max-width: 600px) {
+  .rotation-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .rotation-name {
+    font-size: 20px;
+  }
+
+  .rotation-meta {
+    padding: 12px;
+  }
+
+  .rotation-countdown strong {
+    font-size: 20px;
+  }
+}
+
+/* ===== Apex 配置工具(备份/恢复/分享) ===== */
+
+/* 顶栏下载锚点:复用 button.primary 视觉(a 标签自带基类, 单独声明) */
+.cfg-dl-anchor {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  padding: 10px 18px;
+  font-family: var(--font-tech);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 1px;
+  background: var(--cyan);
+  color: #03060a;
+  border: 1px solid var(--cyan);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.3);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cfg-dl-anchor:hover {
+  background: #4ef4ff;
+  color: #000;
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.65), 0 0 40px rgba(0, 240, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.cfg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.cfg-usage h3, .cfg-publish h3, .cfg-square-head h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  color: var(--cyan);
+  letter-spacing: 1px;
+}
+
+.cfg-steps {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: #c7d3e6;
+}
+
+.cfg-usage code, .cfg-publish code {
+  background: rgba(0, 240, 255, 0.08);
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  padding: 1px 5px;
+  color: var(--cyan);
+  font-size: 11.5px;
+  word-break: break-all;
+}
+
+.cfg-publish .muted, .cfg-usage .muted {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.cfg-summary {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--cyan);
+  margin: -6px 0 10px;
+}
+
+.cfg-square-head { margin-top: 6px; }
+
+.cfg-search { max-width: 280px; }
+
+.cfg-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cfg-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cfg-card-title {
+  font-size: 15px;
+  color: #e8eefc;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.cfg-sub {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.cfg-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cfg-notes {
+  font-size: 12.5px;
+  color: #aab8d8;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-left: 2px solid rgba(0, 240, 255, 0.25);
+  padding-left: 8px;
+}
+
+.cfg-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.cfg-detail {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  font-size: 11px;
+  color: #9fb2d6;
+  background: var(--cyber-bg-alt);
+  border: 1px solid rgba(0, 240, 255, 0.18);
+  padding: 10px;
+}
+
+.cfg-more-row {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 0 4px;
+}
+
+@media (max-width: 700px) {
+  .cfg-grid { grid-template-columns: 1fr; }
+  .cfg-search { max-width: 100%; width: 100%; }
+}

@@ -5,6 +5,7 @@ export const config = {
   secretsKey: process.env.SECRETS_KEY,
   adminInitialPassword: process.env.ADMIN_INITIAL_PASSWORD || 'admin123',
   sessionTimeoutMinutes: Number(process.env.SESSION_TIMEOUT_MINUTES || 30),
+  apexApiKey: process.env.APEX_API_KEY || '',
 }
 
 for (const [k, v] of Object.entries({ JWT_SECRET: config.jwtSecret, SECRETS_KEY: config.secretsKey })) {

@@ -85,13 +85,21 @@ $('btn-logout').addEventListener('click', async () => {
 // ---------- 渲染 ----------
 function renderUser() {
   $('whoami').textContent = state.user.username + (state.user.role === 'admin' ? ' (管理员)' : '')
-  const usersBtn = state.user.role === 'admin'
-  usersBtn ? show('btn-users') : hide('btn-users')
+}
+
+// 统一面板切换:accounts(账号)/ users(用户管理,仅管理员)/ apex(地图轮换)
+function setPanel(name) {
+  ;['panel-accounts', 'panel-users', 'panel-apex', 'panel-apexcfg'].forEach(hide)
+  show('panel-' + name)
+  const isAdmin = state.user?.role === 'admin'
+  $('btn-users').classList.toggle('hidden', !(isAdmin && name === 'accounts'))
+  $('btn-back-accounts').classList.toggle('hidden', name === 'accounts')
+  if (name === 'apex') startRotation(); else stopRotation()
 }
 
 async function bootApp() {
   renderUser()
-  if (state.user.role === 'admin') show('btn-users'); else hide('btn-users')
+  setPanel('accounts')
   await loadGames()
   await loadAccounts()
 }
@@ -213,7 +221,7 @@ async function openAccount(id) {
     state.viewAcc = a
     $('view-title').textContent = a.name
     $('view-platform').textContent = a.platform || '—'
-    $('view-login').textContent = a.login_username
+    $('view-login-name').textContent = a.login_username
     $('view-password').textContent = '••••••••'; $('view-password').dataset.revealed = '0'
     $('btn-reveal').textContent = '显示'
     $('view-note').textContent = a.note || '—'
@@ -374,15 +382,99 @@ $('btn-delete-account').addEventListener('click', async () => {
   finally { loading(btn, false) }
 })
 
+// ---------- Apex 地图轮换 ----------
+let rotationData = null
+let rotationTimer = null
+let rotationRefreshing = false
+
+function startRotation() {
+  loadRotation()
+  clearInterval(rotationTimer)
+  rotationTimer = setInterval(tickRotation, 1000)
+}
+function stopRotation() {
+  clearInterval(rotationTimer)
+  rotationTimer = null
+}
+
+// 当前地图剩余秒数 = 后端快照剩余 - 响应已流逝时间
+function rotationRemaining(mode) {
+  const elapsed = (Date.now() - rotationData.responseAt) / 1000
+  return Math.max(0, Math.round(mode.current.remainingSecs - elapsed))
+}
+
+function formatCountdown(secs) {
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60
+  const mm = String(m).padStart(2, '0'), ss = String(s).padStart(2, '0')
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
+}
+
+async function loadRotation() {
+  try {
+    const data = await api('GET', '/apex/maprotation')
+    rotationData = { ...data, responseAt: Date.now() }
+    hide('apex-error')
+    renderRotation()
+  } catch (err) { $('apex-error').textContent = err.message; show('apex-error') }
+}
+
+function renderRotation() {
+  const data = rotationData
+  $('apex-source').textContent = data.source === 'api'
+    ? (data.staleNotice ? '官方 API(刚才请求失败,展示缓存数据)' : '数据源:apexstatus 官方 API')
+    : '按标准轮换周期推算 · 配置 APEX_API_KEY 后为官方数据'
+  const grid = $('rotation-grid')
+  if (!data.modes.length) { grid.innerHTML = '<div class="empty">暂无轮换数据</div>'; return }
+  grid.innerHTML = data.modes.map(mode => {
+    const c = mode.current
+    const progress = c.durationSecs > 0 ? Math.min(100, (1 - c.remainingSecs / c.durationSecs) * 100) : 0
+    return `
+      <article class="rotation-card">
+        <div class="rotation-banner">
+          ${c.image ? `<img src="${esc(c.image)}" alt="${esc(c.map)}" onerror="this.remove()" />` : ''}
+          <span class="badge rotation-mode">${esc(mode.name)}</span>
+          <div class="rotation-name">${esc(c.map)}</div>
+          ${c.event ? `<div class="rotation-event">${esc(c.event)}</div>` : ''}
+        </div>
+        <div class="rotation-meta">
+          <div class="rotation-countdown">
+            <span class="label-txt">距下场轮换</span>
+            <strong data-countdown="${esc(mode.key)}">${formatCountdown(rotationRemaining(mode))}</strong>
+          </div>
+          <div class="rotation-bar"><div class="rotation-bar-fill" data-fill="${esc(mode.key)}" style="width:${progress}%"></div></div>
+          <div class="rotation-next">下一张地图<b>${esc(mode.next?.map || '待公布')}</b></div>
+        </div>
+      </article>`
+  }).join('')
+}
+
+// 每秒刷新倒计时与进度条;有模式归零时自动拉取下一轮数据
+function tickRotation() {
+  if (!rotationData) return
+  let anyEnded = false
+  for (const mode of rotationData.modes) {
+    const remaining = rotationRemaining(mode)
+    const countdownEl = document.querySelector(`[data-countdown="${mode.key}"]`)
+    const fillEl = document.querySelector(`[data-fill="${mode.key}"]`)
+    if (countdownEl) countdownEl.textContent = formatCountdown(remaining)
+    if (fillEl && mode.current.durationSecs > 0) {
+      fillEl.style.width = Math.min(100, (1 - remaining / mode.current.durationSecs) * 100) + '%'
+    }
+    if (remaining <= 0) anyEnded = true
+  }
+  if (anyEnded && !rotationRefreshing) {
+    rotationRefreshing = true
+    loadRotation().finally(() => { rotationRefreshing = false })
+  }
+}
+
 // ---------- 用户管理 ----------
 $('btn-users').addEventListener('click', async () => {
-  hide('panel-accounts'); show('panel-users')
-  show('btn-back-accounts'); hide('btn-users')
+  setPanel('users')
   try { await loadUsers() } catch (err) { toast(err.message, false) }
 })
-$('btn-back-accounts').addEventListener('click', () => {
-  hide('panel-users'); show('panel-accounts'); hide('btn-back-accounts'); show('btn-users')
-})
+$('btn-back-accounts').addEventListener('click', () => setPanel('accounts'))
+$('btn-apex').addEventListener('click', () => setPanel('apex'))
 $('btn-new-user').addEventListener('click', () => {
   $('user-form').reset(); $('u-id').value = ''; $('user-title').textContent = '新增用户'
   $('u-username-row').classList.remove('hidden'); $('u-password').setAttribute('required', '')
@@ -421,6 +513,222 @@ $('btn-disable-user').addEventListener('click', async () => {
   try { await api('PATCH', '/users/' + id, { disabled: !u.disabled }); toast('已' + action); closeModals(); await loadUsers() }
   catch (err) { toast(err.message, false) }
   finally { loading(btn, false) }
+})
+
+// ---------- Apex 配置分享广场 ----------
+
+let cfgItems = []                      // 已加载的列表数据(增量累积)
+let cfgPublishPayload = ''             // 待发布的 .apexcfg 原始文本
+let cfgSearchTimer = null
+
+const cfgState = { offset: 0, hasMore: false, keyword: '' }
+const CFG_PAGE_SIZE = 12
+const CFG_MAX_PAYLOAD = 512 * 1024
+
+const cfgShow = (el) => el.classList.remove('hidden')
+const cfgHide = (el) => el.classList.add('hidden')
+
+function cfgFormatDate(value) {
+  const d = new Date(value)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function cfgFormatSens(sens) {
+  const entries = Object.entries(sens || {})
+  const pick = entries.find(([key]) => key.includes('mouse_sensitivity')) || entries[0]
+  if (!pick) return ''
+  const num = Number(pick[1])
+  return `灵敏度 ${Number.isFinite(num) ? num : pick[1]}`
+}
+
+function cfgFormatResolution(video) {
+  const w = video && (video['setting.defaultres'] || video.defaultres)
+  const h = video && (video['setting.defaultresheight'] || video.defaultresheight)
+  if (!w || !h) return ''
+  return `${Number(w)}×${Number(h)}`
+}
+
+function cfgChips(config) {
+  const p = config.preview || {}
+  const chips = []
+  const sens = cfgFormatSens(p.sensitivity)
+  if (sens) chips.push(sens)
+  if (typeof p.binds_count === 'number' && p.binds_count > 0) chips.push(`键位 ${p.binds_count} 项`)
+  const res = cfgFormatResolution(p.video)
+  if (res) chips.push(res)
+  chips.push(`${config.file_count} 个文件`)
+  return chips
+}
+
+function renderCfgList() {
+  const listEl = $('cfg-list'), emptyEl = $('cfg-empty')
+  $('cfg-more').classList.toggle('hidden', !cfgState.hasMore)
+  if (cfgItems.length === 0) {
+    listEl.innerHTML = ''
+    emptyEl.textContent = cfgState.keyword ? '没有匹配的分享,换个关键词试试' : '还没有人分享配置,你先来一个?'
+    cfgShow(emptyEl)
+    return
+  }
+  cfgHide(emptyEl)
+  const isAdmin = state.user?.role === 'admin'
+  const myId = state.user?.id
+  // 一次性 innerHTML 拼接渲染, 避免逐卡片操作 DOM 造成多次 reflow
+  listEl.innerHTML = cfgItems.map(c => `
+    <article class="rotation-card cfg-card">
+      <div class="cfg-card-head">
+        <strong class="cfg-card-title">${esc(c.title)}</strong>
+        ${(c.user_id === myId || isAdmin) ? `<button type="button" class="ghost sm" data-cfg-del="${c.id}" title="删除">✕</button>` : ''}
+      </div>
+      <div class="cfg-sub">${esc(c.author)} · ${cfgFormatDate(c.created_at)} · 下载 ${c.downloads} 次</div>
+      <div class="cfg-chips">${cfgChips(c).map(t => `<span class="badge">${esc(t)}</span>`).join('')}</div>
+      ${c.notes ? `<div class="cfg-notes">${esc(c.notes)}</div>` : ''}
+      <div class="cfg-actions">
+        <button type="button" class="primary sm" data-cfg-dl="${c.id}">⇩ 下载 .apexcfg</button>
+        <button type="button" class="ghost sm" data-cfg-toggle="${c.id}">明细</button>
+      </div>
+      <pre class="cfg-detail hidden" id="cfg-detail-${c.id}">${esc(JSON.stringify(c.preview || {}, null, 2))}</pre>
+    </article>`).join('')
+}
+
+async function loadCfgConfigs(reset = false) {
+  const errorEl = $('cfg-error')
+  try {
+    cfgHide(errorEl)
+    const q = new URLSearchParams({ limit: CFG_PAGE_SIZE, offset: reset ? 0 : cfgState.offset })
+    if (cfgState.keyword) q.set('search', cfgState.keyword)
+    const data = await api('GET', '/apex/configs?' + q.toString())
+    cfgState.hasMore = data.hasMore
+    cfgItems = reset ? data.configs : cfgItems.concat(data.configs)
+    cfgState.offset = cfgItems.length
+    renderCfgList()
+  } catch (err) { errorEl.textContent = err.message; cfgShow(errorEl) }
+}
+
+function cfgSanitizeFilename(name) {
+  const cleaned = String(name).replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, ' ').trim()
+  return (cleaned || 'apex-config').slice(0, 60)
+}
+
+async function downloadCfg(id) {
+  try {
+    // ?count=1 让服务端计下载次数;payload 只在详情接口返回(列表不传正文)
+    const { config } = await api('GET', `/apex/configs/${id}?count=1`)
+    const blob = new Blob([config.payload], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = cfgSanitizeFilename(config.title) + '.apexcfg'
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 2000)
+    toast(`已下载 ${a.download},用工具 import 即可应用`)
+  } catch (err) { toast(err.message, false) }
+}
+
+async function deleteCfg(id, btn) {
+  if (!confirm('确认删除这条分享?')) return
+  loading(btn, true)
+  try {
+    await api('DELETE', '/apex/configs/' + id)
+    cfgItems = cfgItems.filter(c => c.id !== id)
+    renderCfgList()
+    toast('已删除')
+  } catch (err) { toast(err.message, false) }
+  finally { loading(btn, false) }
+}
+
+// 前端先做一次结构校验, 与服务端同规则, 避免明显错误多跑一次网络
+function cfgSummarize(data) {
+  if (data.kind !== 'apexcfg' || data.format !== 1) throw new Error('不是 .apexcfg 格式,请用工具 export 导出')
+  const files = data.files && typeof data.files === 'object' ? Object.keys(data.files) : []
+  if (!files.length) throw new Error('配置里没有任何文件内容')
+  const parts = []
+  const sens = cfgFormatSens(data.preview?.sensitivity)
+  if (sens) parts.push(sens)
+  parts.push(`${files.length} 个文件`)
+  return parts.join(' · ')
+}
+
+// 面板懒加载:首次点开才请求列表, 平时零开销
+$('btn-apexcfg').addEventListener('click', () => {
+  setPanel('apexcfg')
+  loadCfgConfigs(true)
+})
+
+$('cfg-list').addEventListener('click', (e) => {
+  const dl = e.target.closest('[data-cfg-dl]')
+  if (dl) return downloadCfg(Number(dl.dataset.cfgDl))
+  const del = e.target.closest('[data-cfg-del]')
+  if (del) return deleteCfg(Number(del.dataset.cfgDel), del)
+  const toggle = e.target.closest('[data-cfg-toggle]')
+  if (toggle) $(`cfg-detail-${toggle.dataset.cfgToggle}`).classList.toggle('hidden')
+})
+
+$('cfg-more').addEventListener('click', () => loadCfgConfigs())
+
+// 搜索 300ms 防抖, 输入期间不打接口
+$('cfg-search').addEventListener('input', (e) => {
+  clearTimeout(cfgSearchTimer)
+  cfgSearchTimer = setTimeout(() => {
+    cfgState.keyword = e.target.value.trim()
+    loadCfgConfigs(true)
+  }, 300)
+})
+
+$('cfg-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0]
+  const summaryEl = $('cfg-file-summary'), errorEl = $('cfg-publish-error')
+  cfgPublishPayload = ''
+  cfgHide(summaryEl)
+  cfgHide(errorEl)
+  if (!file) return
+  if (file.size > CFG_MAX_PAYLOAD) {
+    errorEl.textContent = '文件超过 512KB,不是有效的配置包(请用工具 export 导出)'
+    cfgShow(errorEl)
+    e.target.value = ''
+    return
+  }
+  try {
+    const text = await file.text()
+    const parsed = JSON.parse(text)
+    summaryEl.textContent = '✔ ' + cfgSummarize(parsed)
+    cfgShow(summaryEl)
+    cfgPublishPayload = text
+    if (!$('cfg-title').value && parsed.label) $('cfg-title').value = String(parsed.label).slice(0, 60)
+  } catch (err) {
+    errorEl.textContent = err.name === 'SyntaxError' ? '文件不是有效 JSON' : err.message
+    cfgShow(errorEl)
+    e.target.value = ''
+  }
+})
+
+$('cfg-publish-form').addEventListener('submit', async (e) => {
+  e.preventDefault()
+  const errorEl = $('cfg-publish-error')
+  cfgHide(errorEl)
+  if (!cfgPublishPayload) {
+    errorEl.textContent = '请先选择 .apexcfg 文件'
+    cfgShow(errorEl)
+    return
+  }
+  const btn = e.target.querySelector('button[type=submit]')
+  loading(btn, true)
+  try {
+    const parsed = JSON.parse(cfgPublishPayload)
+    await api('POST', '/apex/configs', {
+      title: $('cfg-title').value.trim() || parsed.label || '未命名配置',
+      notes: $('cfg-notes').value.trim(),
+      payload: cfgPublishPayload,
+    })
+    toast('已发布到分享广场')
+    $('cfg-publish-form').reset()
+    cfgPublishPayload = ''
+    cfgHide($('cfg-file-summary'))
+    await loadCfgConfigs(true)
+  } catch (err) {
+    errorEl.textContent = err.message
+    cfgShow(errorEl)
+  } finally { loading(btn, false) }
 })
 
 // 弹层关闭与 Esc

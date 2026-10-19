@@ -4,6 +4,8 @@ import authRoutes from './routes/auth.js'
 import userRoutes from './routes/users.js'
 import accountRoutes from './routes/accounts.js'
 import gameRoutes from './routes/games.js'
+import apexRoutes from './routes/apex.js'
+import apexConfigRoutes from './routes/apex-configs.js'
 
 // Express 4 不会捕获 async handler 里被 reject 的 Promise,若放任不管,
 // 任何一次数据库错误都会导致进程退出(整服务不可用)。这里兜底:记录错误而非退出。
@@ -14,7 +16,8 @@ process.on('unhandledRejection', (err) => {
 const app = express()
 import { config } from './config.js'
 
-app.use(express.json())
+// 分享的 .apexcfg 正文(base64)可达数百 KB, 默认 100KB 上限会直接 413
+app.use(express.json({ limit: '1mb' }))
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
@@ -28,6 +31,9 @@ app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/accounts', accountRoutes)
 app.use('/api/games', gameRoutes)
+// /api/apex/configs 挂在 /api/apex 之前:子路径优先命中专属路由, 不落到轮换路由
+app.use('/api/apex/configs', apexConfigRoutes)
+app.use('/api/apex', apexRoutes)
 
 app.use((err, req, res, next) => {
   console.error(err)

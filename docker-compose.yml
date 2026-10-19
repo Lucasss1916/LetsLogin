@@ -21,6 +21,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       SECRETS_KEY: ${SECRETS_KEY}
       ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-admin123}
+      APEX_API_KEY: ${APEX_API_KEY:-}
       SESSION_TIMEOUT_MINUTES: 30
     depends_on:
       db:

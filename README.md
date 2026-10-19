@@ -5,6 +5,7 @@
 - **后端** Node.js + Express + PostgreSQL，JWT 认证
 - **前端** 静态单页应用，由 nginx 提供并反代 API
 - **安全** 密码与 2FA Secret 用 AES-256-GCM 加密落库；改密/重置密码即吊销旧 JWT
+- **Apex** 内置 Apex 地图轮换查询与本地配置备份/分享工具
 
 ## 技术栈
 
@@ -44,6 +45,7 @@ open http://localhost:8080
 | `SECRETS_KEY` | ✅ | AES-256-GCM 加密密钥,必须为 64 个 hex 字符(`openssl rand -hex 32`) |
 | `ADMIN_INITIAL_PASSWORD` | 否 | 初始管理员密码,默认 `admin123` |
 | `PORT` / `DATABASE_URL` / `SESSION_TIMEOUT_MINUTES` | 否 | 见 `server/src/config.js` |
+| `APEX_API_KEY` | 否 | apexstatus 免费 key([apexlegendsstatus.com](https://apexlegendsstatus.com) 注册),用于 Apex 地图轮换页的官方实时数据;未配置时按标准轮换周期本地推算(赛季更替需更新 `server/src/apex.js` 中的地图池) |
 
 ## 常用命令
 
@@ -62,6 +64,23 @@ docker compose down -v                 # 停止并清空数据卷
 - **会话占用**：签出(开始占用)→同一账号同时仅一人可用→签入(结束占用)
 - **审计日志**：登录、增删改账号、查看密文、会话起止均记录 `audit_logs`
 
+## Apex 配置工具（备份 / 恢复 / 分享）
+
+登录后进入「Apex 配置」面板，下载单文件工具 `apex_cfg_tool.py`（仅需 Python 3.8+，零第三方依赖），集中管理 Apex Legends 本地配置——灵敏度、键位、画质等均**字节级备份**，不依赖解析格式：
+
+```powershell
+python apex_cfg_tool.py scan                           # 定位配置目录(Saved Games\Respawn\Apex\local)
+python apex_cfg_tool.py backup                         # 备份(指纹去重+自动轮转,默认保留 20 份)
+python apex_cfg_tool.py list                           # 查看备份列表
+python apex_cfg_tool.py restore apex-backup-XXXX.zip   # 恢复(恢复前自动为当前状态打安全包)
+python apex_cfg_tool.py export -o 我的配置.apexcfg       # 导出可分享配置(含灵敏度预览)
+python apex_cfg_tool.py import 队友配置.apexcfg          # 应用他人配置(同样先打安全包)
+```
+
+- 安全性：逐文件 sha256 校验、原子写入、包内文件名防路径穿越；服务端发布时会重新校验 base64/哈希
+- 网页「分享广场」支持标题/备注/灵敏度摘要搜索与分页浏览；配置正文仅在点击下载时拉取（列表接口不传 payload）
+- 详细设计与性能方案见 [docs/apex-config-design.md](docs/apex-config-design.md)
+
 ## API 一览
 
 | 方法 | 路径 | 说明 |
@@ -74,22 +93,32 @@ docker compose down -v                 # 停止并清空数据卷
 | POST | `/api/accounts/:id/sessions` | 签出(占用) |
 | POST | `/api/accounts/:id/sessions/end` | 签入 |
 | GET/POST | `/api/users` | (管理员)用户管理 |
+| GET | `/api/apex/maprotation` | Apex 当前地图轮换与下场轮换倒计时 |
+| GET | `/api/apex/configs` | Apex 配置分享列表(分页/搜索,不含配置正文) |
+| GET | `/api/apex/configs/:id` | 配置详情(含 `.apexcfg` 正文;`?count=1` 计一次下载) |
+| POST | `/api/apex/configs` | 发布配置(服务端全量校验文件名/base64/sha256) |
+| DELETE | `/api/apex/configs/:id` | 删除配置(本人或管理员) |
 
 ## 目录结构
 
 ```
 .
-├── docker-compose.yml      # 编排 db / server / web
-├── .env                    # 密钥(不入库)
-├── server/                 # 后端
+├── docker-compose.yml        # 编排 db / server / web
+├── .env                      # 密钥(不入库)
+├── docs/
+│   └── apex-config-design.md # Apex 配置工具设计文档
+├── server/                   # 后端
 │   └── src/
-│       ├── index.js        # 入口
-│       ├── config.js       # 配置校验
-│       ├── db.js           # 连接池 / 迁移 / 审计
-│       ├── auth.js         # JWT 签发与鉴权(含吊销校验)
-│       ├── crypto.js       # AES-256-GCM
-│       ├── totp.js         # TOTP 动态码
-│       └── routes/         # auth / users / accounts
-└── web/                    # 前端(nginx)
-    └── public/             # index.html / app.js / style.css
+│       ├── index.js          # 入口
+│       ├── config.js         # 配置校验
+│       ├── db.js             # 连接池 / 迁移(含 apex_configs 表) / 审计
+│       ├── auth.js           # JWT 签发与鉴权(含吊销校验)
+│       ├── crypto.js         # AES-256-GCM
+│       ├── totp.js           # TOTP 动态码
+│       ├── apex.js           # Apex 地图轮换数据
+│       └── routes/           # auth / users / accounts / apex / apex-configs
+└── web/                      # 前端(nginx)
+    └── public/
+        ├── index.html / app.js / style.css
+        └── downloads/        # apex_cfg_tool.py 工具直链
 ```
