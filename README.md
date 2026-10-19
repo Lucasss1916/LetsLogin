@@ -66,7 +66,7 @@ docker compose down -v                 # 停止并清空数据卷
 
 ## Apex 配置工具（备份 / 恢复 / 分享）
 
-登录后进入「Apex 配置」面板，下载单文件工具 `apex_cfg_tool.py`（仅需 Python 3.8+，零第三方依赖），集中管理 Apex Legends 本地配置——灵敏度、键位、画质等均**字节级备份**，不依赖解析格式：
+登录后进入「Apex 配置」面板，下载 `apex_cfg_tool.exe`(Windows,CI 自动打包,**免装 Python**)或 `apex_cfg_tool.py`(macOS/Linux,需 Python 3.8+,零第三方依赖)，集中管理 Apex Legends 本地配置——灵敏度、键位、画质等均**字节级备份**，不依赖解析格式：
 
 ```powershell
 python apex_cfg_tool.py scan                           # 定位配置目录(Saved Games\Respawn\Apex\local)

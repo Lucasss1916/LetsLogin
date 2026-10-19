@@ -1331,6 +1331,26 @@ button[disabled] {
   transform: translateY(-1px);
 }
 
+/* 组合双下载按钮:主 exe + 次 .py */
+.cfg-dl-group {
+  display: inline-flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.cfg-dl-group .cfg-dl-anchor.ghost {
+  background: transparent;
+  color: var(--cyan);
+}
+
+/* 次级 .py 按钮缩小一档 */
+.cfg-dl-group .cfg-dl-anchor.ghost {
+  padding: 9px 14px;
+  font-size: 12px;
+}
+
+
 .cfg-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));

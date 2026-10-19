@@ -93,18 +93,21 @@
     <section id="panel-apexcfg" class="hidden">
       <div class="panel-head">
         <h2>Apex 配置工具</h2>
-        <a class="primary cfg-dl-anchor" href="/downloads/apex_cfg_tool.py" download>⇩ 下载 apex_cfg_tool.py</a>
+        <span class="cfg-dl-group">
+          <a class="primary cfg-dl-anchor" href="/downloads/apex_cfg_tool.exe" download>⇩ Windows exe(免装 Python)</a>
+          <a class="ghost cfg-dl-anchor" href="/downloads/apex_cfg_tool.py" download>⇩ .py 源脚本</a>
+        </span>
       </div>
 
       <div class="cfg-grid">
         <div class="card cfg-usage">
           <h3>备份 / 恢复(本机)</h3>
           <ol class="cfg-steps">
-            <li>下载工具到任意目录(仅需 Python 3.8+,零第三方依赖)</li>
-            <li>打开 PowerShell / 终端,进入该目录</li>
-            <li>备份当前配置:<code>python apex_cfg_tool.py backup</code></li>
-            <li>查看备份列表:<code>python apex_cfg_tool.py list</code></li>
-            <li>恢复备份:<code>python apex_cfg_tool.py restore apex-backup-XXXX.zip</code></li>
+            <li>Windows 用户下载 exe(零依赖,下载即用);macOS / Linux 下载 .py(需 Python 3.8+,零第三方依赖)</li>
+            <li>打开 PowerShell / 终端,进入文件所在目录</li>
+            <li>备份当前配置:<code>.\apex_cfg_tool.exe backup</code>(.py 版为 <code>python apex_cfg_tool.py backup</code>)</li>
+            <li>查看备份列表:<code>.\apex_cfg_tool.exe list</code></li>
+            <li>恢复备份:<code>.\apex_cfg_tool.exe restore apex-backup-XXXX.zip</code></li>
           </ol>
           <p class="muted">工具只读写 <code>Saved Games\Respawn\Apex\local</code> 下的 <code>*.cfg / *.txt</code> 配置文件(灵敏度、键位、画质);每次恢复前会自动给当前状态打安全包,可随时再恢复回去。</p>
         </div>

@@ -1,0 +1,49 @@
+# Apex 配置工具 Windows exe 自动打包
+# 触发:工具脚本或本工作流变更;产物 exe由 CI 提交回仓库(nginx /downloads/ 直接供全队下载)
+# exe 由 windows runner 上 PyInstaller 生成 —— macOS 无法交叉编译 Windows,勿在本机手打
+name: build-apex-cfg-exe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/public/downloads/apex_cfg_tool.py'
+      - '.github/workflows/build-apex-cfg-exe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build onefile exe
+        run: pyinstaller --onefile --console --clean --name apex_cfg_tool web/public/downloads/apex_cfg_tool.py
+
+      - name: Smoke-test exe
+        run: .\dist\apex_cfg_tool.exe --help
+
+      - name: Commit exe back to downloads/
+        run: |
+          Copy-Item dist\apex_cfg_tool.exe web\public\downloads\apex_cfg_tool.exe
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/public/downloads/apex_cfg_tool.exe
+          git commit -m "[skip ci] build apex_cfg_tool.exe from $env:GITHUB_SHA"
+          git push
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apex_cfg_tool-exe
+          path: dist/apex_cfg_tool.exe
