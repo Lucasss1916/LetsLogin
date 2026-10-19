@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# build: v1 (packaged by CI on windows-latest)
 """ApexCfgTool — Apex Legends 本地配置 备份/恢复/导出/导入 工具(单文件, 仅标准库)
 
 命令:
