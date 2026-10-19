@@ -86,6 +86,7 @@ python apex_cfg_tool.py import 队友配置.apexcfg          # 应用他人配�
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | POST | `/api/auth/login` | 登录,返回 JWT |
+| POST | `/api/auth/register` | 邀请码注册(管理员生成邀请码后自助开号) |
 | POST | `/api/auth/change-password` | 改密(同时吊销旧 token) |
 | GET | `/api/auth/me` | 当前用户 |
 | GET/POST | `/api/accounts` | 账号列表 / 新建 |

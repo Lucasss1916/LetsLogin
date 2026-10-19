@@ -60,6 +60,19 @@ export async function migrate() {
       name TEXT UNIQUE NOT NULL,
       rank_tiers JSONB NOT NULL DEFAULT '[]'
     );
+    -- 邀请码注册:码由管理员生成;max_uses 控制可注册人数(一次码默认 1)
+    CREATE TABLE IF NOT EXISTS invite_codes (
+      id SERIAL PRIMARY KEY,
+      code TEXT UNIQUE NOT NULL,
+      created_by INTEGER REFERENCES users(id),
+      note TEXT NOT NULL DEFAULT '',
+      max_uses INTEGER NOT NULL DEFAULT 1,
+      used_count INTEGER NOT NULL DEFAULT 0,
+      expires_at TIMESTAMPTZ,
+      disabled BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_invite_codes_created ON invite_codes(created_at DESC);
     -- 账号关联的游戏:一个账号可上多个游戏,各自标记当前段位(rank 为展示标签,如 "白银2")
     CREATE TABLE IF NOT EXISTS account_games (
       id SERIAL PRIMARY KEY,

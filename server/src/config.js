@@ -6,6 +6,12 @@ export const config = {
   adminInitialPassword: process.env.ADMIN_INITIAL_PASSWORD || 'admin123',
   sessionTimeoutMinutes: Number(process.env.SESSION_TIMEOUT_MINUTES || 30),
   apexApiKey: process.env.APEX_API_KEY || '',
+  // SMTP 发信(可选):配置后管理员生成邀请码可直发邮箱;推荐 465(SSL)/587(TLS)
+  smtpHost: process.env.SMTP_HOST || '',
+  smtpPort: Number(process.env.SMTP_PORT || 465),
+  smtpUser: process.env.SMTP_USER || '',
+  smtpPass: process.env.SMTP_PASS || '',
+  smtpFrom: process.env.SMTP_FROM || '',
 }
 
 for (const [k, v] of Object.entries({ JWT_SECRET: config.jwtSecret, SECRETS_KEY: config.secretsKey })) {

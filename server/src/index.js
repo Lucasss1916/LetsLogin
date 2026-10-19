@@ -5,6 +5,8 @@ import userRoutes from './routes/users.js'
 import accountRoutes from './routes/accounts.js'
 import gameRoutes from './routes/games.js'
 import apexRoutes from './routes/apex.js'
+import inviteRoutes from './routes/invites.js'
+import adminRoutes from './routes/admin.js'
 import apexConfigRoutes from './routes/apex-configs.js'
 
 // Express 4 不会捕获 async handler 里被 reject 的 Promise,若放任不管,
@@ -34,6 +36,8 @@ app.use('/api/games', gameRoutes)
 // /api/apex/configs 挂在 /api/apex 之前:子路径优先命中专属路由, 不落到轮换路由
 app.use('/api/apex/configs', apexConfigRoutes)
 app.use('/api/apex', apexRoutes)
+app.use('/api/invites', inviteRoutes)
+app.use('/api/admin', adminRoutes)
 
 app.use((err, req, res, next) => {
   console.error(err)

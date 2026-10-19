@@ -1535,3 +1535,76 @@ button[disabled] {
     font-size: 10px;
   }
 }
+
+/* ==========================================================================
+   注册切换 / 管理后台子面板 / 邀请码台帐
+   ========================================================================== */
+.auth-switch {
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.auth-link {
+  color: var(--cyan);
+  text-decoration: none;
+  letter-spacing: 0.5px;
+}
+
+.auth-link:hover {
+  text-shadow: var(--cyan-glow);
+}
+
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.admin-hint {
+  font-size: 12px;
+  margin: 0 0 12px;
+}
+
+.invite-code {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--cyan);
+  letter-spacing: 1.5px;
+  background: rgba(0, 240, 255, 0.06);
+  border: 1px solid rgba(0, 240, 255, 0.18);
+  padding: 2px 8px;
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* 审计/邀请表格列宽权重 */
+#audit-table td:nth-child(1), #invite-table td:nth-child(5) { white-space: nowrap; }
+#audit-table td:nth-child(2), #audit-table td:nth-child(4) { color: var(--text); }
+
+@media (max-width: 600px) {
+  .admin-tabs {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-tabs .platform-chip,
+  .admin-tabs .primary {
+    width: 100%;
+  }
+
+  .table-container {
+    overflow-x: auto;
+  }
+
+  #invite-table, #audit-table, #user-table {
+    min-width: 560px;
+  }
+}

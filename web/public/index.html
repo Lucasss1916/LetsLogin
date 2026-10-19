@@ -14,7 +14,7 @@
     <div class="cyber-scanlines"></div>
   </div>
 
-  <!-- 登录视图 -->
+  <!-- 登录/邀请码注册视图 -->
   <main id="view-login" class="auth-view hidden">
     <form id="login-form" class="card auth-card">
       <div class="auth-brand-wrap">
@@ -26,6 +26,22 @@
       <label><span class="label-txt">密码</span><input id="login-password" type="password" autocomplete="current-password" required placeholder="PASSWORD" /></label>
       <div id="login-error" class="error hidden"></div>
       <button class="primary" type="submit">ACCESS // 登录</button>
+      <p class="auth-switch">还没有账号?<a href="#" id="goto-register" class="auth-link">邀请码注册 →</a></p>
+    </form>
+
+    <form id="register-form" class="card auth-card hidden">
+      <div class="auth-brand-wrap">
+        <div class="cyber-badge-top">[ INVITE ONLY ACCESS ]</div>
+        <h2>邀请码注册</h2>
+        <p class="muted">// 输入管理员下发的邀请码开号</p>
+      </div>
+      <label><span class="label-txt">邀请码 *</span><input id="reg-invite" required placeholder="XXXX-XXXX-XXXX" autocomplete="off" /></label>
+      <label><span class="label-txt">用户名 * (2-24 位字母/数字/下划线)</span><input id="reg-username" required autocomplete="username" placeholder="USERNAME" /></label>
+      <label><span class="label-txt">密码 * (至少 8 位)</span><input id="reg-password" type="password" required autocomplete="new-password" placeholder="ACCESS KEY" /></label>
+      <label><span class="label-txt">确认密码 *</span><input id="reg-password2" type="password" required autocomplete="new-password" placeholder="REPEAT" /></label>
+      <div id="register-error" class="error hidden"></div>
+      <button class="primary" type="submit">CREATE // 注册并进入</button>
+      <p class="auth-switch">已有账号?<a href="#" id="goto-login" class="auth-link">← 返回登录</a></p>
     </form>
   </main>
 
@@ -55,7 +71,7 @@
         <span id="whoami" class="muted">…</span>
         <button id="btn-apex" class="ghost">Apex 轮换</button>
         <button id="btn-apexcfg" class="ghost">Apex 配置</button>
-        <button id="btn-users" class="ghost hidden">用户管理</button>
+      <button id="btn-users" class="ghost hidden">管理后台</button>
         <button id="btn-back-accounts" class="ghost hidden">← 返回账号</button>
         <button id="btn-logout" class="ghost">退出</button>
       </div>
@@ -69,15 +85,43 @@
       <div id="account-list" class="account-list"></div>
     </section>
 
+    <!-- 管理后台(用户 / 邀请码 / 审计日志) -->
     <section id="panel-users" class="hidden">
       <div class="panel-head">
-        <h2>用户管理</h2>
+        <h2>管理后台</h2>
+      </div>
+      <div class="admin-tabs">
+        <button type="button" class="platform-chip active" data-admin-tab="users">用户</button>
+        <button type="button" class="platform-chip" data-admin-tab="invites">邀请码</button>
+        <button type="button" class="platform-chip" data-admin-tab="audit">审计日志</button>
         <button id="btn-new-user" class="primary">+ 新增用户</button>
+        <button id="btn-new-invite" class="primary hidden">+ 生成邀请码</button>
       </div>
-      <div class="table-container">
-        <table id="user-table" class="table"></table>
+
+      <div id="admin-users">
+        <div class="table-container">
+          <table id="user-table" class="table"></table>
+        </div>
+        <div id="user-placeholder" class="muted hidden"></div>
       </div>
-      <div id="user-placeholder" class="muted hidden"></div>
+
+      <div id="admin-invites" class="hidden">
+        <p class="muted admin-hint">生成邀请码发给需要开户的成员;一码可用次数与有效期均可控制。配置 SMTP 后可直接把码发进对方邮箱。</p>
+        <div class="table-container">
+          <table id="invite-table" class="table"></table>
+        </div>
+        <div id="invite-placeholder" class="muted hidden"></div>
+      </div>
+
+      <div id="admin-audit" class="hidden">
+        <div class="table-container">
+          <table id="audit-table" class="table"></table>
+        </div>
+        <div class="cfg-more-row">
+          <span id="audit-empty" class="muted hidden"></span>
+          <button id="audit-more" class="ghost hidden">加载更多</button>
+        </div>
+      </div>
     </section>
 
     <section id="panel-apex" class="hidden">
@@ -247,6 +291,28 @@
         <div class="modal-actions">
           <button type="button" class="ghost danger" id="btn-disable-user" hidden>禁用/启用</button>
           <button type="submit" class="primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 生成邀请码弹层 -->
+  <div id="modal-invite" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3 id="invite-title">生成邀请码</h3>
+        <button class="ghost" data-close>✕</button>
+      </div>
+      <form id="invite-form">
+        <label><span class="label-txt">备注(用途,如 "给 XX 的车队码")</span><input id="iv-note" maxlength="120" placeholder="可选" /></label>
+        <label><span class="label-txt">可用次数</span><input id="iv-max-uses" type="number" min="1" max="99" value="1" /></label>
+        <label><span class="label-txt">有效天数(留空 = 永久)</span><input id="iv-days" type="number" min="1" max="365" placeholder="如 7" /></label>
+        <label><span class="label-txt">发送到邮箱(可选,需已配置 SMTP)</span><input id="iv-email" type="email" placeholder="teammate@example.com" /></label>
+        <div id="invite-result" class="cfg-summary hidden"></div>
+        <div id="invite-error" class="error hidden"></div>
+        <div class="modal-actions">
+          <button type="button" class="ghost" id="btn-copy-invite" hidden>复制邀请码</button>
+          <button type="submit" class="primary">生成</button>
         </div>
       </form>
     </div>

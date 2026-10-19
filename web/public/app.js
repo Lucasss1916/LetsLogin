@@ -46,6 +46,13 @@ async function copyText(txt) {
   catch { toast('复制失败,请手动选择', false) }
 }
 
+// 短时间格式(MM-DD HH:mm),后台表格通用
+function fmtHM(value) {
+  const d = new Date(value)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 // ---------- 登录 ----------
 $('login-form').addEventListener('submit', async (e) => {
   e.preventDefault(); hide('login-error')
@@ -58,6 +65,29 @@ $('login-form').addEventListener('submit', async (e) => {
     if (user.mustChangePassword) showChangePw(); else { bootApp(); showApp() }
   } catch (err) { const el = $('login-error'); el.textContent = err.message; show('login-error') }
   finally { loading(btn, false) }
+})
+
+// 邀请码注册(与登录同视图切换)
+const showLoginView = () => { show('login-form'); hide('register-form'); hide('login-error'); hide('register-error') }
+const showRegisterView = () => { show('register-form'); hide('login-form'); hide('login-error'); hide('register-error') }
+$('goto-register').addEventListener('click', (e) => { e.preventDefault(); showRegisterView() })
+$('goto-login').addEventListener('click', (e) => { e.preventDefault(); showLoginView() })
+
+$('register-form').addEventListener('submit', async (e) => {
+  e.preventDefault(); hide('register-error')
+  const pw = $('reg-password').value, pw2 = $('reg-password2').value
+  const err = (msg) => { const el = $('register-error'); el.textContent = msg; show('register-error') }
+  if (pw !== pw2) return err('两次输入的密码不一致')
+  const btn = e.target.querySelector('button[type=submit]'); loading(btn, true)
+  try {
+    const { token, user } = await api('POST', '/auth/register', {
+      username: $('reg-username').value.trim(),
+      password: pw,
+      inviteCode: $('reg-invite').value.trim(),
+    })
+    state.token = token; localStorage.setItem('ll_token', token); state.user = user; renderUser()
+    bootApp(); showApp()
+  } catch (e2) { err(e2.message) } finally { loading(btn, false) }
 })
 
 // 强制改密
@@ -212,7 +242,7 @@ document.addEventListener('click', async (e) => {
   if (ue) openUserForm(Number(ue.dataset.editUser))
 })
 
-function closeModals() { ['modal-account', 'modal-view', 'modal-user'].forEach(id => hide(id)) }
+function closeModals() { ['modal-account', 'modal-view', 'modal-user', 'modal-invite'].forEach(id => hide(id)) }
 
 // ---------- 账号操作 ----------
 async function openAccount(id) {
@@ -479,10 +509,160 @@ function tickRotation() {
   }
 }
 
-// ---------- 用户管理 ----------
+// ---------- 管理后台(用户 / 邀请码 / 审计日志) ----------
+let adminTab = 'users'
+
+function switchAdminTab(tab) {
+  adminTab = tab
+  document.querySelectorAll('[data-admin-tab]').forEach(b => b.classList.toggle('active', b.dataset.adminTab === tab))
+  ;['admin-users', 'admin-invites', 'admin-audit'].forEach(id => $(id).classList.toggle('hidden', id !== 'admin-' + tab))
+  $('btn-new-user').classList.toggle('hidden', tab !== 'users')
+  $('btn-new-invite').classList.toggle('hidden', tab !== 'invites')
+  if (tab === 'users') loadUsers().catch(() => {})
+  if (tab === 'invites') loadInvites().catch(() => {})
+  if (tab === 'audit') loadAudit(true).catch(() => {})
+}
+
+document.querySelectorAll('[data-admin-tab]').forEach(b =>
+  b.addEventListener('click', () => switchAdminTab(b.dataset.adminTab)))
+
+// 邀请码管理
+let inviteList = []
+let inviteSmtpOk = false
+
+async function loadInvites() {
+  const d = await api('GET', '/invites')
+  inviteList = d.invites || []
+  inviteSmtpOk = Boolean(d.smtpConfigured)
+  $('iv-email').closest('label').classList.toggle('hidden', !inviteSmtpOk)
+  renderInvites()
+}
+
+function inviteStatus(inv) {
+  if (inv.disabled) return { text: '已禁用', cls: 'red' }
+  if (inv.expires_at && new Date(inv.expires_at) < new Date()) return { text: '已过期', cls: 'yellow' }
+  if (inv.used_count >= inv.max_uses) return { text: '已用完', cls: 'yellow' }
+  return { text: '可用', cls: 'green' }
+}
+
+function renderInvites() {
+  const table = $('invite-table'), empty = $('invite-placeholder')
+  if (!inviteList.length) {
+    table.innerHTML = ''
+    empty.textContent = '还没有邀请码,点上面「+ 生成邀请码」'
+    empty.classList.remove('hidden')
+    return
+  }
+  empty.classList.add('hidden')
+  table.innerHTML =
+    '<thead><tr><th>邀请码</th><th>备注</th><th>用量</th><th>状态</th><th>有效期</th><th>创建人</th><th>操作</th></tr></thead><tbody>' +
+    inviteList.map(inv => {
+      const st = inviteStatus(inv)
+      const expire = inv.expires_at ? fmtHM(inv.expires_at) : '永久'
+      return `<tr>
+      <td><code class="invite-code">${esc(inv.code)}</code></td>
+      <td>${esc(inv.note || '—')}</td>
+      <td>${inv.used_count}/${inv.max_uses}</td>
+      <td><span class="tag ${st.cls}">${st.text}</span>${inv.email_status_disp || ''}</td>
+      <td>${expire}</td>
+      <td>${esc(inv.created_by_name || '—')}</td>
+      <td class="row-actions">
+        <button class="ghost sm" data-inv-copy="${inv.id}">复制</button>
+        <button class="ghost sm" data-inv-toggle="${inv.id}">${inv.disabled ? '启用' : '禁用'}</button>
+        <button class="ghost sm danger" data-inv-del="${inv.id}">删除</button>
+      </td></tr>`
+    }).join('') + '</tbody>'
+}
+
+$('invite-table').addEventListener('click', async (e) => {
+  const cpy = e.target.closest('[data-inv-copy]')
+  if (cpy) { const inv = inviteList.find(x => x.id === Number(cpy.dataset.invCopy)); return copyText(inv.code) }
+  const tog = e.target.closest('[data-inv-toggle]')
+  if (tog) {
+    const inv = inviteList.find(x => x.id === Number(tog.dataset.invToggle))
+    try { await api('PATCH', '/invites/' + inv.id, { disabled: !inv.disabled }); toast('已更新'); await loadInvites() }
+    catch (err) { toast(err.message, false) }
+    return
+  }
+  const del = e.target.closest('[data-inv-del]')
+  if (del) {
+    if (!confirm('确认删除该邀请码?已发出的码将立即失效')) return
+    try { await api('DELETE', '/invites/' + del.dataset.invDel); toast('已删除'); await loadInvites() }
+    catch (err) { toast(err.message, false) }
+  }
+})
+
+let lastInviteCode = ''
+$('btn-new-invite').addEventListener('click', () => {
+  $('invite-form').reset(); hide('invite-result'); hide('invite-error'); $('btn-copy-invite').hidden = true
+  $('iv-max-uses').value = 1
+  show('modal-invite')
+})
+
+$('invite-form').addEventListener('submit', async (e) => {
+  e.preventDefault(); hide('invite-error'); hide('invite-result')
+  const body = { note: $('iv-note').value.trim(), maxUses: Number($('iv-max-uses').value) || 1 }
+  if ($('iv-days').value) body.expiresInDays = Number($('iv-days').value)
+  const email = $('iv-email').value.trim()
+  if (email) body.email = email
+  const btn = e.target.querySelector('button[type=submit]'); loading(btn, true)
+  try {
+    const inv = await api('POST', '/invites', body)
+    lastInviteCode = inv.code
+    const res = $('invite-result')
+    res.innerHTML = `✔ 已生成 <code class="invite-code">${esc(inv.code)}</code>${inv.emailStatus ? `<div class="muted" style="margin-top:6px">${esc(inv.emailStatus)}</div>` : ''}`
+    res.classList.remove('hidden')
+    $('btn-copy-invite').hidden = false
+    toast('邀请码已生成')
+    if (adminTab === 'invites') loadInvites().catch(() => {})
+  } catch (err) {
+    const el = $('invite-error'); el.textContent = err.message; show('invite-error')
+  } finally { loading(btn, false) }
+})
+
+$('btn-copy-invite').addEventListener('click', () => lastInviteCode && copyText(lastInviteCode))
+
+// 审计日志台账
+let auditItems = []
+const auditState = { offset: 0, hasMore: false }
+
+async function loadAudit(reset = false) {
+  const q = `?limit=50&offset=${reset ? 0 : auditState.offset}`
+  const d = await api('GET', '/admin/audit' + q)
+  auditItems = reset ? d.logs : auditItems.concat(d.logs)
+  auditState.offset = auditItems.length
+  auditState.hasMore = d.hasMore
+  renderAudit()
+}
+
+function renderAudit() {
+  const table = $('audit-table'), empty = $('audit-empty')
+  $('audit-more').classList.toggle('hidden', !auditState.hasMore)
+  if (!auditItems.length) {
+    table.innerHTML = ''
+    empty.textContent = '暂无审计记录'
+    empty.classList.remove('hidden')
+    return
+  }
+  empty.classList.add('hidden')
+  table.innerHTML =
+    '<thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>对象</th></tr></thead><tbody>' +
+    auditItems.map(a => {
+      const meta = Object.keys(a.meta || {}).length ? esc(JSON.stringify(a.meta)) : ''
+      return `<tr title="${meta}">
+      <td>${fmtHM(a.created_at)}</td>
+      <td>${esc(a.actor || '匿名/系统')}</td>
+      <td><span class="tag blue">${esc(a.action)}</span></td>
+      <td>${esc(a.target || '—')}</td></tr>`
+    }).join('') + '</tbody>'
+}
+
+$('audit-more').addEventListener('click', () => loadAudit().catch(() => {}))
+
+// 用户管理
 $('btn-users').addEventListener('click', async () => {
   setPanel('users')
-  try { await loadUsers() } catch (err) { toast(err.message, false) }
+  switchAdminTab('users') // 进入后台重置到默认子面板并加载
 })
 $('btn-back-accounts').addEventListener('click', () => setPanel('accounts'))
 $('btn-apex').addEventListener('click', () => setPanel('apex'))
@@ -539,12 +719,6 @@ const CFG_MAX_PAYLOAD = 512 * 1024
 const cfgShow = (el) => el.classList.remove('hidden')
 const cfgHide = (el) => el.classList.add('hidden')
 
-function cfgFormatDate(value) {
-  const d = new Date(value)
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
 function cfgFormatSens(sens) {
   const entries = Object.entries(sens || {})
   const pick = entries.find(([key]) => key.includes('mouse_sensitivity')) || entries[0]
@@ -591,7 +765,7 @@ function renderCfgList() {
         <strong class="cfg-card-title">${esc(c.title)}</strong>
         ${(c.user_id === myId || isAdmin) ? `<button type="button" class="ghost sm" data-cfg-del="${c.id}" title="删除">✕</button>` : ''}
       </div>
-      <div class="cfg-sub">${esc(c.author)} · ${cfgFormatDate(c.created_at)} · 下载 ${c.downloads} 次</div>
+      <div class="cfg-sub">${esc(c.author)} · ${fmtHM(c.created_at)} · 下载 ${c.downloads} 次</div>
       <div class="cfg-chips">${cfgChips(c).map(t => `<span class="badge">${esc(t)}</span>`).join('')}</div>
       ${c.notes ? `<div class="cfg-notes">${esc(c.notes)}</div>` : ''}
       <div class="cfg-actions">

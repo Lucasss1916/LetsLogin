@@ -47,6 +47,62 @@ r.post('/login', async (req, res) => {
   })
 })
 
+// 注册限流:每 IP 每小时 20 次(邀请码本身也是门槛;单容器自托管,内存计数即可)
+const REGISTER_LIMIT = 20, REGISTER_WINDOW_MS = 3600e3
+const registerLog = new Map() // ip -> { count, windowStart }
+
+r.post('/register', async (req, res) => {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.ip
+  const now = Date.now()
+  let entry = registerLog.get(ip)
+  if (!entry || now - entry.windowStart > REGISTER_WINDOW_MS) {
+    entry = { count: 0, windowStart: now }
+    registerLog.set(ip, entry)
+  }
+  entry.count++
+  if (entry.count > REGISTER_LIMIT) {
+    await audit(null, 'register_rate_limited', null, { ip })
+    return res.status(429).json({ error: '注册尝试过于频繁,请稍后再试' })
+  }
+
+  const { username, password, inviteCode } = req.body || {}
+  const name = String(username || '').trim()
+  const code = String(inviteCode || '').trim().toUpperCase()
+  if (!name || !password || !code) return res.status(400).json({ error: '请填写邀请码、用户名和密码' })
+  if (!/^[a-zA-Z0-9_]{2,24}$/.test(name)) return res.status(400).json({ error: '用户名仅限 2-24 位字母/数字/下划线' })
+  if (String(password).length < 8) return res.status(400).json({ error: '密码至少 8 位' })
+
+  // 事务:原子消耗邀请码(防并发超用)+ 建号,任一失败整体回滚
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const used = await client.query(
+      `UPDATE invite_codes SET used_count = used_count + 1
+       WHERE code = $1 AND NOT disabled AND used_count < max_uses
+         AND (expires_at IS NULL OR expires_at > now())
+       RETURNING id, max_uses`, [code])
+    if (!used.rows.length) {
+      await client.query('ROLLBACK')
+      const [exists] = (await client.query('SELECT 1 FROM invite_codes WHERE code=$1', [code])).rows
+      return res.status(400).json({ error: exists ? '邀请码已失效(被禁用/过期/用完)' : '邀请码无效' })
+    }
+    const inserted = await client.query(
+      `INSERT INTO users (username, password_hash, role, must_change_password)
+       VALUES ($1,$2,'user',FALSE) RETURNING id, username, role, must_change_password`,
+      [name, await bcrypt.hash(String(password), 10)])
+    await client.query('COMMIT')
+    const u = inserted.rows[0]
+    await audit(u.id, 'register', `user:${u.id}`, { invite: code, ip })
+    res.json({ token: signToken({ ...u, token_version: 1 }), user: { id: u.id, username: u.username, role: u.role, mustChangePassword: false } })
+  } catch (e) {
+    await client.query('ROLLBACK')
+    if (e.code === '23505') return res.status(409).json({ error: '用户名已存在,换一个试试' })
+    throw e
+  } finally {
+    client.release()
+  }
+})
+
 r.post('/change-password', requireAuth, async (req, res) => {
   const { oldPassword, newPassword } = req.body || {}
   if (!newPassword || newPassword.length < 8) return res.status(400).json({ error: '新密码至少 8 位' })
