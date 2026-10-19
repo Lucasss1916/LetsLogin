@@ -1608,3 +1608,20 @@ button[disabled] {
     min-width: 560px;
   }
 }
+
+/* 推算模式醒目提示条 */
+.fallback-note {
+  font-size: 13px;
+  color: var(--yellow);
+  border: 1px solid rgba(252, 238, 10, 0.35);
+  background: var(--yellow-dim);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  line-height: 1.6;
+}
+
+.fallback-note code {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+}

@@ -461,6 +461,7 @@ $('platform-chips').addEventListener('click', (e) => {
 
 function renderRotation() {
   const data = rotationData
+  $('apex-fallback-note').classList.toggle('hidden', data.source !== 'fallback')
   $('apex-source').textContent = data.source === 'api'
     ? (data.staleNotice ? `官方 API(刚才请求失败,展示缓存数据) · ${PLATFORM_LABEL[rotationPlatform]}` : `数据源:apexstatus 官方 API · ${PLATFORM_LABEL[rotationPlatform]}`)
     : `按标准轮换周期推算 · 配置 APEX_API_KEY 后为官方数据 · ${PLATFORM_LABEL[rotationPlatform]}`
