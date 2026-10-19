@@ -386,6 +386,8 @@ $('btn-delete-account').addEventListener('click', async () => {
 let rotationData = null
 let rotationTimer = null
 let rotationRefreshing = false
+let rotationPlatform = 'PC' // 亚服默认:PC(东京节点);PS4/X1 为主机池
+const PLATFORM_LABEL = { PC: '亚服 · PC', PS4: 'PlayStation', X1: 'Xbox' }
 
 function startRotation() {
   loadRotation()
@@ -411,18 +413,27 @@ function formatCountdown(secs) {
 
 async function loadRotation() {
   try {
-    const data = await api('GET', '/apex/maprotation')
+    const data = await api('GET', '/apex/maprotation?platform=' + rotationPlatform)
     rotationData = { ...data, responseAt: Date.now() }
     hide('apex-error')
     renderRotation()
   } catch (err) { $('apex-error').textContent = err.message; show('apex-error') }
 }
 
+// 区/平台切换(亚服 · PC 默认);同平台全球各连接区轮换一致
+$('platform-chips').addEventListener('click', (e) => {
+  const chip = e.target.closest('.platform-chip')
+  if (!chip || chip.dataset.platform === rotationPlatform) return
+  rotationPlatform = chip.dataset.platform
+  document.querySelectorAll('.platform-chip').forEach(c => c.classList.toggle('active', c === chip))
+  loadRotation()
+})
+
 function renderRotation() {
   const data = rotationData
   $('apex-source').textContent = data.source === 'api'
-    ? (data.staleNotice ? '官方 API(刚才请求失败,展示缓存数据)' : '数据源:apexstatus 官方 API')
-    : '按标准轮换周期推算 · 配置 APEX_API_KEY 后为官方数据'
+    ? (data.staleNotice ? `官方 API(刚才请求失败,展示缓存数据) · ${PLATFORM_LABEL[rotationPlatform]}` : `数据源:apexstatus 官方 API · ${PLATFORM_LABEL[rotationPlatform]}`)
+    : `按标准轮换周期推算 · 配置 APEX_API_KEY 后为官方数据 · ${PLATFORM_LABEL[rotationPlatform]}`
   const grid = $('rotation-grid')
   if (!data.modes.length) { grid.innerHTML = '<div class="empty">暂无轮换数据</div>'; return }
   grid.innerHTML = data.modes.map(mode => {

@@ -5,10 +5,10 @@ import { getMapRotation } from '../apex.js'
 const r = Router()
 r.use(requireAuth)
 
-// Apex 当前地图轮换与轮换时间(配置 APEX_API_KEY 用官方数据,否则本地推算)
-r.get('/maprotation', async (_req, res) => {
+// Apex 当前地图轮换与轮换时间(按区/平台读取:PC=亚服默认,PS4/X1 主机;未配 key 走本地推算)
+r.get('/maprotation', async (req, res) => {
   try {
-    res.json(await getMapRotation())
+    res.json(await getMapRotation(req.query.platform))
   } catch (err) {
     res.status(502).json({ error: '获取 Apex 地图轮换失败:' + err.message })
   }

@@ -93,7 +93,7 @@ python apex_cfg_tool.py import 队友配置.apexcfg          # 应用他人配�
 | POST | `/api/accounts/:id/sessions` | 签出(占用) |
 | POST | `/api/accounts/:id/sessions/end` | 签入 |
 | GET/POST | `/api/users` | (管理员)用户管理 |
-| GET | `/api/apex/maprotation` | Apex 当前地图轮换与下场轮换倒计时 |
+| GET | `/api/apex/maprotation?platform=PC\|PS4\|X1` | Apex 地图轮换(按平台读不同的池,默认亚服=PC;同平台全球各连接区一致) |
 | GET | `/api/apex/configs` | Apex 配置分享列表(分页/搜索,不含配置正文) |
 | GET | `/api/apex/configs/:id` | 配置详情(含 `.apexcfg` 正文;`?count=1` 计一次下载) |
 | POST | `/api/apex/configs` | 发布配置(服务端全量校验文件名/base64/sha256) |

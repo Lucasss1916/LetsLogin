@@ -12,6 +12,16 @@ const ROTATION_API_URL = 'https://api.mozambiquehe.re/maprotation?version=2'
 const CACHE_TTL_MS = 10 * 60 * 1000
 const FETCH_TIMEOUT_MS = 8000
 
+// Apex 轮换按「平台」分池(PC / PS4 / X1),同平台全球各连接区(东京/法兰克福等)一致;
+// 亚洲玩家默认为 PC 端(亚服即 platform=PC)。外部值一律归一化,防 URL 注入。
+const PLATFORMS = ['PC', 'PS4', 'X1']
+const DEFAULT_PLATFORM = 'PC'
+
+export function normalizePlatform(value) {
+  const p = String(value || '').toUpperCase()
+  return PLATFORMS.includes(p) ? p : DEFAULT_PLATFORM
+}
+
 // 兜底推算:大逃杀标准地图每 2 小时轮换一次,池内地图循环。
 // 地图池随赛季 split 变化,赛季更替时需人工更新;配置 APEX_API_KEY 后自动改为官方数据、免维护。
 const FALLBACK_PERIOD_SECS = 2 * 60 * 60
@@ -63,8 +73,8 @@ function normalizeMode(key, name, raw) {
   }
 }
 
-async function fetchRemoteRotation() {
-  const res = await fetch(ROTATION_API_URL, {
+async function fetchRemoteRotation(platform) {
+  const res = await fetch(`${ROTATION_API_URL}&platform=${platform}`, {
     headers: { Authorization: config.apexApiKey },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   })
@@ -79,20 +89,21 @@ async function fetchRemoteRotation() {
     normalizeMode('ltm', '限时模式', raw.ltm),
   ].filter(Boolean)
   if (!modes.length) throw new Error('数据源响应中没有可用模式')
-  return { source: 'api', modes }
+  return { source: 'api', platform, modes }
 }
 
-let cache = { data: null, atMs: 0 }
+let cache = { data: null, atMs: 0, platform: DEFAULT_PLATFORM }
 
-export async function getMapRotation() {
+export async function getMapRotation(rawPlatform = DEFAULT_PLATFORM) {
+  const platform = normalizePlatform(rawPlatform)
   const nowMs = Date.now()
-  if (cache.data && nowMs - cache.atMs < CACHE_TTL_MS) return cache.data
+  if (cache.data && cache.platform === platform && nowMs - cache.atMs < CACHE_TTL_MS) return cache.data
 
   if (config.apexApiKey) {
     try {
-      const data = await fetchRemoteRotation()
+      const data = await fetchRemoteRotation(platform)
       data.fetchedAtMs = nowMs
-      cache = { data, atMs: nowMs }
+      cache = { data, atMs: nowMs, platform }
       return data
     } catch (err) {
       // 请求失败时回退到过期缓存(实况可能滞后),并把原因带给前端提示
@@ -101,5 +112,6 @@ export async function getMapRotation() {
     }
   }
 
-  return { source: 'fallback', fetchedAtMs: nowMs, modes: [fallbackRotation(nowMs)] }
+  // 兜底推算:各平台同池,仅大逃杀;platform 不影响计算
+  return { source: 'fallback', fetchedAtMs: nowMs, platform, modes: [fallbackRotation(nowMs)] }
 }
