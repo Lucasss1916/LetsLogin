@@ -1625,3 +1625,44 @@ button[disabled] {
   background: rgba(255, 255, 255, 0.06);
   padding: 1px 6px;
 }
+
+/* ==========================================================================
+   用户批量操作条 / 选择列
+   ========================================================================== */
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border: 1px dashed var(--line);
+  background: rgba(0, 240, 255, 0.03);
+}
+
+.bulk-bar .muted {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+#user-table input[type='checkbox'] {
+  cursor: pointer;
+  accent-color: var(--cyan);
+  width: 15px;
+  height: 15px;
+}
+
+#user-table td:first-child {
+  width: 34px;
+  text-align: center;
+}
+
+.ghost.sm.danger {
+  color: var(--red);
+  border-color: rgba(255, 0, 85, 0.4);
+}
+
+.ghost.sm.danger:hover {
+  box-shadow: 0 0 8px rgba(255, 0, 85, 0.35);
+}

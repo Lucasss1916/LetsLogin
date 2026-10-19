@@ -185,19 +185,78 @@ async function loadUsers() {
   const { users } = await api('GET', '/users'); allUsers = users
   const tbody = renderUsers(); if (!tbody) return
 }
+const userSel = new Set() // 勾选中的用户 id
 function renderUsers() {
   const table = $('user-table')
-  if (allUsers.length === 0) { table.innerHTML = ''; show('user-placeholder'); return }
+  if (allUsers.length === 0) { table.innerHTML = ''; show('user-placeholder'); updateBulkBar(); return }
   hide('user-placeholder')
+  const allChecked = allUsers.length > 0 && allUsers.every(u => userSel.has(u.id))
   table.innerHTML =
-    '<thead><tr><th>ID</th><th>用户名</th><th>角色</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
+    '<thead><tr><th><input type="checkbox" id="sel-all"' + (allChecked ? ' checked' : '') + '></th><th>ID</th><th>用户名</th><th>角色</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
     allUsers.map(u => `<tr>
+      <td><input type="checkbox" data-sel-user="${u.id}"${userSel.has(u.id) ? ' checked' : ''}></td>
       <td>${u.id}</td><td>${esc(u.username)}</td>
       <td><span class="tag ${u.role === 'admin' ? 'blue' : 'green'}">${u.role === 'admin' ? '管理员' : '用户'}</span></td>
       <td>${u.disabled ? '<span class="tag red">已禁用</span>' : '<span class="tag yellow">正常</span>'}</td>
-      <td><button class="ghost sm" data-edit-user="${u.id}">编辑</button></td>
+      <td><button class="ghost sm" data-edit-user="${u.id}">编辑</button>
+          <button class="ghost sm danger" data-del-user="${u.id}">删除</button></td>
     </tr>`).join('') + '</tbody>'
+  updateBulkBar()
 }
+
+function updateBulkBar() {
+  const bar = $('user-bulk-bar')
+  if (!bar) return
+  bar.hidden = userSel.size === 0
+  $('bulk-count').textContent = `已选 ${userSel.size} 个用户`
+}
+
+function filteredSelection() {
+  const ids = [...userSel]
+  const skipped = ids.filter(id => id === state.user.id)
+  return { ids: ids.filter(id => id !== state.user.id), skippedSelf: skipped.length > 0 }
+}
+
+async function bulkUsers(action, ids) {
+  const d = await api('POST', '/users/bulk', { action, ids })
+  const tag = { disable: '禁用', enable: '启用', delete: '删除' }[action]
+  const errs = d.results.filter(r => !r.ok)
+  if (errs.length) toast(`${tag}完成:成功 ${d.okCount},失败 ${d.failCount}(如:${errs[0].error})`, d.okCount > 0)
+  else toast(`${tag}完成,共 ${d.okCount} 个用户`)
+  userSel.clear()
+  await loadUsers()
+}
+
+$('user-table').addEventListener('change', (e) => {
+  if (e.target.id === 'sel-all') {
+    const on = e.target.checked
+    userSel.clear()
+    if (on) allUsers.forEach(u => userSel.add(u.id))
+    document.querySelectorAll('[data-sel-user]').forEach(cb => { cb.checked = on })
+  } else if (e.target.dataset.selUser) {
+    const id = Number(e.target.dataset.selUser)
+    if (userSel.has(id)) userSel.delete(id); else userSel.add(id)
+  }
+  updateBulkBar()
+})
+
+$('btn-bulk-disable').addEventListener('click', async () => {
+  const { ids, skippedSelf } = filteredSelection()
+  if (!ids.length) return
+  if (skippedSelf) toast('已自动跳过你自己', false)
+  await bulkUsers('disable', ids)
+})
+$('btn-bulk-enable').addEventListener('click', async () => {
+  const { ids } = filteredSelection()
+  if (ids.length) await bulkUsers('enable', ids)
+})
+$('btn-bulk-delete').addEventListener('click', async () => {
+  const { ids, skippedSelf } = filteredSelection()
+  if (!ids.length) { toast('不能删除自己,请另选用户', false); return }
+  if (!confirm(`确认删除选中的 ${ids.length} 个用户?\n其名下密码账号、共享关系与会话记录将一并删除,不可恢复`)) return
+  if (skippedSelf) toast('不能删除自己,已自动跳过', false)
+  await bulkUsers('delete', ids)
+})
 
 async function loadAccounts() {
   const { accounts } = await api('GET', '/accounts')
@@ -239,7 +298,19 @@ document.addEventListener('click', async (e) => {
 
   // 用户编辑
   const ue = e.target.closest('[data-edit-user]')
-  if (ue) openUserForm(Number(ue.dataset.editUser))
+  if (ue) { openUserForm(Number(ue.dataset.editUser)); return }
+
+  // 用户删除(单条)
+  const ud = e.target.closest('[data-del-user]')
+  if (ud) {
+    const u = allUsers.find(x => x.id === Number(ud.dataset.delUser))
+    if (!u) return
+    if (u.id === state.user.id) { toast('不能删除自己的账号', false); return }
+    if (confirm(`确认删除用户 ${u.username}?\n其名下密码账号、共享关系与会话记录将一并删除,不可恢复`)) {
+      await bulkUsers('delete', [u.id])
+    }
+    return
+  }
 })
 
 function closeModals() { ['modal-account', 'modal-view', 'modal-user', 'modal-invite'].forEach(id => hide(id)) }

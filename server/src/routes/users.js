@@ -52,4 +52,85 @@ r.patch('/:id', async (req, res) => {
   res.json({ ok: true })
 })
 
+// 删除用户的事务清理链:sessions(NO ACTION)→ accounts(级联 shares/games/configs)
+// → audit/invite 归引用置空 → 删用户行。调用方已校验 self 与最后管理员保护。
+async function deleteUserOne(client, id) {
+  await client.query(
+    'DELETE FROM sessions WHERE user_id=$1 OR account_id IN (SELECT id FROM accounts WHERE owner_id=$1)', [id])
+  await client.query('DELETE FROM accounts WHERE owner_id=$1', [id])
+  await client.query('UPDATE audit_logs SET actor_id=NULL WHERE actor_id=$1', [id])
+  await client.query('UPDATE invite_codes SET created_by=NULL WHERE created_by=$1', [id])
+  await client.query('DELETE FROM users WHERE id=$1', [id])
+}
+
+r.delete('/:id', async (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: '非法用户 ID' })
+  if (id === req.user.id) return res.status(400).json({ error: '不能删除自己的账号' })
+
+  const c = await pool.connect()
+  try {
+    await c.query('BEGIN')
+    const [target] = (await c.query('SELECT username, role FROM users WHERE id=$1', [id])).rows
+    if (!target) throw new Error('用户不存在或已被删除')
+    if (target.role === 'admin') {
+      const { rows: [{ n }] } = await c.query("SELECT COUNT(*)::int AS n FROM users WHERE role='admin'")
+      if (n <= 1) throw new Error('系统必须保留至少一位管理员')
+    }
+    await deleteUserOne(c, id)
+    await c.query('COMMIT')
+    await audit(req.user.id, 'user_delete', `user:${id}`, { username: target.username })
+    res.json({ ok: true })
+  } catch (e) {
+    await c.query('ROLLBACK').catch(() => {})
+    res.status(400).json({ error: e.message })
+  } finally {
+    c.release()
+  }
+})
+
+// 批量操作:disable / enable / delete。逐项独立处理并返回逐条结果,
+// self 与"最后一个管理员"由各自分支保护,失败的项不影响其余项。
+r.post('/bulk', async (req, res) => {
+  const { action, ids } = req.body || {}
+  const idList = [...new Set((Array.isArray(ids) ? ids : []).map(Number).filter(n => Number.isInteger(n) && n > 0))]
+  if (!['disable', 'enable', 'delete'].includes(action)) return res.status(400).json({ error: '无效的操作类型' })
+  if (!idList.length) return res.status(400).json({ error: '请先勾选要操作的用户' })
+
+  const results = []
+  for (const id of idList) {
+    if (action === 'delete') {
+      if (id === req.user.id) { results.push({ id, ok: false, error: '不能删除自己' }); continue }
+      const c = await pool.connect()
+      try {
+        await c.query('BEGIN')
+        const [target] = (await c.query('SELECT username, role FROM users WHERE id=$1', [id])).rows
+        if (!target) throw new Error('用户不存在')
+        if (target.role === 'admin') {
+          const { rows: [{ n }] } = await c.query("SELECT COUNT(*)::int AS n FROM users WHERE role='admin'")
+          if (n <= 1) throw new Error('系统必须保留至少一位管理员')
+        }
+        await deleteUserOne(c, id)
+        await c.query('COMMIT')
+        await audit(req.user.id, 'user_delete', `user:${id}`, { username: target.username, bulk: true })
+        results.push({ id, ok: true })
+      } catch (e) {
+        await c.query('ROLLBACK').catch(() => {})
+        results.push({ id, ok: false, error: e.message })
+      } finally {
+        c.release()
+      }
+    } else {
+      if (action === 'disable' && id === req.user.id) { results.push({ id, ok: false, error: '不能禁用自己' }); continue }
+      const [target] = (await pool.query('SELECT username FROM users WHERE id=$1', [id])).rows
+      if (!target) { results.push({ id, ok: false, error: '用户不存在' }); continue }
+      await pool.query('UPDATE users SET disabled=$1 WHERE id=$2', [action === 'disable', id])
+      await audit(req.user.id, action === 'disable' ? 'user_disable' : 'user_enable', `user:${id}`, { username: target.username, bulk: true })
+      results.push({ id, ok: true })
+    }
+  }
+  const okCount = results.filter(r => r.ok).length
+  res.json({ results, okCount, failCount: results.length - okCount })
+})
+
 export default r
