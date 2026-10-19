@@ -639,6 +639,20 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _ensure_utf8_output() -> None:
+    """Windows 管道/重定向场景 stdout 默认走 cp1252,中文帮助会 UnicodeEncodeError 崩溃;
+    console 附着时底层本就是 UTF-16 API,reconfigure 失败则静默跳过,双端都不受影响。"""
+    for _s in (sys.stdout, sys.stderr):
+        try:
+            _s.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+
+
+if sys.platform == 'win32':
+    _ensure_utf8_output()
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
