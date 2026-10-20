@@ -1151,6 +1151,18 @@ const CFG_PARAM_ZH = {
   'localclientuid': '本地客户端 UID(勿改)',
   'cl_invites_only_friends': '仅好友可发邀请',
   'cl_invites_only_team': '仅队友可发邀请',
+  // previousgamestate.txt —— Apex 退出时写入的运行状态快照
+  'state.buildstring': '游戏构建版本号(内部标识,勿改)',
+  'state.totalmapsfullyconnectedto': '本次会话完整连接过的地图总数',
+  'state.lasttimestampinminutes': '状态写入时刻(以分钟计数)',
+  'state.wasgamerunning': '上次退出时游戏是否仍在运行(0/1)',
+  'state.lastmapfullyconnectedto': '最近完整连接(未掉线)的地图',
+  'state.lastmapfullydisconnectedto': '最近完整断开连接的地图',
+  'state.lastmapdisconnectedto': '最近断开的地图',
+  'state.lastmapconnectedto': '最近连接的地图',
+  'state.lastplaylistname': '上次所在游戏模式(播放列表)',
+  'state.lastgamemode': '上次的游戏模式',
+  'state.lastlegend': '上次使用的传奇',
 }
 
 const CFG_DETAIL_ROW_CAP = 400
@@ -1171,6 +1183,7 @@ function cfgBuildDetailHtml(payloadText) {
         ]
     const html = groups.filter(g => g[1].length > 0).map(([title, groupRows]) => {
       const isBinds = title.startsWith('键位')
+      const head = `<div class="kv-row3 kv-head"><span class="kv-key">键</span><span class="kv-cmd">${isBinds ? '原指令' : '值'}</span><span class="kv-zh">中文说明</span></div>`
       const body = groupRows.slice(0, CFG_DETAIL_ROW_CAP).map(r => {
         if (isBinds) {
           const keyZh = cfgKeyZh(r[0])
@@ -1183,7 +1196,7 @@ function cfgBuildDetailHtml(payloadText) {
       const more = groupRows.length > CFG_DETAIL_ROW_CAP
         ? `<div class="cfg-kv-title">…其余 ${groupRows.length - CFG_DETAIL_ROW_CAP} 行省略</div>`
         : ''
-      return `<div class="cfg-kv-group"><div class="cfg-kv-title">${esc(title)} · ${groupRows.length} 项${isBinds ? '(键 / 原指令 / 中文说明)' : ''}</div>${body}${more}</div>`
+      return `<div class="cfg-kv-group"><div class="cfg-kv-title">${esc(title)} · ${groupRows.length} 项</div>${head}${body}${more}</div>`
     }).join('')
     return `<div class="cfg-file"><h4>${esc(name)} <button type="button" class="ghost sm" data-cfg-raw="${fIdx}">查看原文</button></h4>` +
       `<pre class="cfg-raw hidden" id="cfg-raw-${fIdx}">${esc(raw)}</pre>${html || '<div class="cfg-kv-title">(空)</div>'}</div>`

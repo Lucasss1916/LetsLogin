@@ -1462,10 +1462,15 @@ button[disabled] {
 .cfg-detail-hint { font-family: var(--font-mono); color: var(--muted); }
 
 .cfg-file h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   margin: 10px 0 4px;
   color: var(--cyan);
   font-size: 12.5px;
   letter-spacing: 1px;
+  overflow-wrap: anywhere;
 }
 
 .cfg-kv-title {
@@ -1770,15 +1775,16 @@ button[disabled] {
 }
 
 /* 键位对照三联行:键 / 原指令 / 中文 */
+/* 键值行:宽屏三列(键 | 值 | 中文),窄屏折成两行 —— 不再纵向塌成三行 */
 .kv-row3 {
-  display: grid;
-  grid-template-columns: minmax(90px, 1.1fr) minmax(110px, 1fr) minmax(110px, 1.2fr);
-  gap: 8px;
-  padding: 5px 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  padding: 6px 8px;
   border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
   font-family: var(--font-mono);
   font-size: 12px;
-  align-items: baseline;
 }
 
 .kv-row3:nth-child(odd) {
@@ -1786,8 +1792,11 @@ button[disabled] {
 }
 
 .kv-key {
+  flex: 0 1 auto;
+  min-width: 108px;
   color: var(--cyan);
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .kv-key em {
@@ -1799,18 +1808,48 @@ button[disabled] {
 }
 
 .kv-cmd {
+  flex: 1 1 150px;
+  min-width: 0;
   color: var(--text);
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .kv-zh {
+  flex: 0 0 auto;
+  margin-left: auto;
   color: var(--yellow);
+  text-align: right;
+}
+
+.kv-zh:empty {
+  display: none;
 }
 
 .kv-zh i {
   color: var(--muted);
   font-style: normal;
   font-size: 11px;
+}
+
+/* 组内表头行(与数据行同列结构):宽屏显示列名,窄屏隐藏以省空间 */
+.kv-head {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 1px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 3px;
+  margin-bottom: 2px;
+  background: none;
+}
+
+.kv-head .kv-key,
+.kv-head .kv-cmd {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.kv-head .kv-zh {
+  color: var(--muted);
 }
 
 .cfg-raw {
@@ -1829,13 +1868,36 @@ button[disabled] {
 }
 
 .cfg-file h4 .ghost.sm {
-  margin-left: 8px;
+  margin-left: auto;
   vertical-align: middle;
 }
 
 @media (max-width: 600px) {
+  /* 窄屏两行制:第一行「键 + 值」(长值折行),中文说明折到第二行 */
   .kv-row3 {
-    grid-template-columns: 1fr;
-    gap: 2px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 1px 8px;
+    font-size: 11.5px;
+  }
+
+  .kv-key {
+    grid-column: 1;
+    min-width: 0;
+  }
+
+  .kv-cmd {
+    grid-column: 2;
+    min-width: 0;
+  }
+
+  .kv-zh {
+    grid-column: 1 / -1;
+    margin-left: 0;
+    text-align: left;
+  }
+
+  .kv-head {
+    display: none;
   }
 }
