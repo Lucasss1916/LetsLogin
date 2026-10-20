@@ -948,8 +948,8 @@ function cfgParsePairsText(text) {
   const reQuoted = /"([^"\r\n]+)"\s+"([^"\r\n]*)"/g
   let m
   for (const line of text.split(/\r?\n/)) {
-    // bind 行(如 bind "w" "+forward"):单独标记为 bind,供分组与中文对照
-    const bindline = line.match(/^\s*bind\s+"([^"]+)"\s+"([^"]*)"/i)
+    // bind 行(实测存在 bind "…" / bind_US_standard "…" 0 / bind_held_US_standard "…" 0 三种形态)
+    const bindline = line.match(/^\s*bind[a-zA-Z_]*\s+"([^"]+)"\s+"([^"]*)"/i)
     if (bindline) {
       const k = bindline[1].trim(), v = bindline[2].trim()
       bindKeys.add(k)
@@ -990,8 +990,20 @@ function cfgKeyZh(key) {
     SPACE: '空格', TAB: 'Tab 键', CAPSLOCK: '大写锁定', SHIFT: 'Shift', CTRL: 'Ctrl', ALT: 'Alt',
     LSHIFT: '左 Shift', RSHIFT: '右 Shift', LCTRL: '左 Ctrl', RCTRL: '右 Ctrl', LALT: '左 Alt', RALT: '右 Alt',
     INS: '插入 Ins', DEL: '删除 Del', HOME: 'Home', END: 'End',
-    PGUP: '翻页上 PgUp', PGDN: '翻页下 PgDn', PAUSE: '暂停键',
+    PGUP: '翻页上 PgUp', PGDN: '翻页下 PgDn', PAUSE: '暂停键', SCROLLLOCK: '滚动锁定',
     LEFTARROW: '方向 ←', RIGHTARROW: '方向 →', UPARROW: '方向 ↑', DOWNARROW: '方向 ↓',
+    MOUSE1: '鼠标左键', MOUSE2: '鼠标右键', MOUSE3: '鼠标中键',
+    WHEELUP: '滚轮上', WHEELDOWN: '滚轮下', MWHEELUP: '滚轮上', MWHEELDOWN: '滚轮下',
+    A_BUTTON: '手柄 A', B_BUTTON: '手柄 B', X_BUTTON: '手柄 X', Y_BUTTON: '手柄 Y',
+    L_SHOULDER: '手柄左肩键(LB)', R_SHOULDER: '手柄右肩键(RB)',
+    L_TRIGGER: '手柄左扳机(LT)', R_TRIGGER: '手柄右扳机(RT)',
+    L_STICK: '手柄左摇杆按下', R_STICK: '手柄右摇杆按下',
+    BACK_SELECT: '手柄选择/分享键', START: '手柄开始键',
+    DPAD_UP: '手柄十字键 ↑', DPAD_DOWN: '手柄十字键 ↓', DPAD_LEFT: '手柄十字键 ←', DPAD_RIGHT: '手柄十字键 →',
+    RESERVE4: '手柄保留键 4', RESERVE5: '手柄保留键 5', RESERVE6: '手柄保留键 6',
+    BACKQUOTE: '反引号 `', SEMICOLON: '分号 ;', QUOTE: '单引号 \'', MINUS: '减号 -', EQUAL: '等号 =',
+    LBRACKET: '左方括号 [', RBRACKET: '右方括号 ]', BACKSLASH: '反斜杠 \\',
+    COMMA: '逗号 ,', PERIOD: '句号 .', SLASH: '斜杠 /',
   }
   if (named[k]) return named[k]
   if (k.startsWith('MOUSE')) {
@@ -1001,31 +1013,144 @@ function cfgKeyZh(key) {
     if (n === '3') return '鼠标中键'
     return '鼠标侧键 ' + n
   }
-  if (k === 'WHEELUP' || k === 'MWHEELUP') return '滚轮上'
-  if (k === 'WHEELDOWN' || k === 'MWHEELDOWN') return '滚轮下'
   if (k.startsWith('KP_')) {
     const sub = { INS: '0', END: '1', DOWNARROW: '2', PGDN: '3', LEFTARROW: '4', '5': '5', RIGHTARROW: '6', HOME: '7', UPARROW: '8', PGUP: '9', DEL: '.', SLASH: '/', MULTIPLY: '*', MINUS: '-', PLUS: '+', ENTER: 'Enter' }
     const s = sub[k.slice(3)]
     if (s) return '小键盘 ' + s
   }
+  if (k.startsWith('DPAD_')) return '手柄十字键 ' + k.slice(5)
+  if (k.startsWith('RESERVE')) return '手柄保留键 ' + k.slice(7)
+  if (k.startsWith('STICK')) return '手柄摇杆'
+  if (k === 'TRIGGER_LEFT') return '手柄左扳机(LT)'
+  if (k === 'TRIGGER_RIGHT') return '手柄右扳机(RT)'
+  if (k === 'SHOULDER_LEFT') return '手柄左肩键(LB)'
+  if (k === 'SHOULDER_RIGHT') return '手柄右肩键(RB)'
   return ''
 }
 
-const CFG_BIND_ZH = {
-  '+forward': '前进', '+back': '后退', '+moveleft': '左平移', '+moveright': '右平移',
-  '+jump': '跳跃', '+duck': '蹲下', '+speed': '静步走', '+sprint': '冲刺',
-  '+attack': '主攻击(开火)', '+attack2': '次要攻击', '+zoom': '瞄准(ADS)', '+reload': '装填弹药',
-  '+melee': '近战攻击', '+use': '交互(拾取/开门/扶人)',
-  '+tactical': '战术技能', '+ultimate': '终极技能', '+ping': '标点 / 快速标记',
-  '+invnext': '切换下一把武器', '+invprev': '切换上一把武器',
-  '+slot1': '切到 1 号武器', '+slot2': '切到 2 号武器', '+slot3': '切到 3 号武器',
-  '+invnextnpg': '切换下一把武器(小键盘兼容)', '+inspect': '检视武器',
-  '+scores': '计分板', '+map': '打开地图', '+toggle_duck': '蹲下(切换式)',
+// 消耗品与手柄能力编号(实测自 settings.cfg 默认键位)
+const CFG_CONSUMABLE_ZH = {
+  HEALTH_SMALL: '使用小治疗针', HEALTH_LARGE: '使用大治疗针',
+  SHIELD_SMALL: '使用小护盾电池', SHIELD_LARGE: '使用大护盾电池',
+  PHOENIX_KIT: '使用凤凰治疗包', COMBO_FULL: '使用组合恢复', ULTIMATE: '使用终极充能',
 }
 
-function cfgBindZh(cmd) {
-  const t = String(cmd).trim().replace(/^"|"$/g, '').split(/\s+/)[0]
-  return CFG_BIND_ZH[t.toLowerCase()] || CFG_BIND_ZH[t] || ''
+// 动作指令中文(实测自 Apex 默认 settings.cfg + 社区 autoexec 常用指令; 键全部小写)
+const CFG_BIND_ZH = {
+  '+forward': '前进', '+backward': '后退', '+back': '后退',
+  '+moveleft': '左平移', '+moveright': '右平移',
+  '+jump': '跳跃', '+duck': '蹲下(按住)', '+toggle_duck': '蹲下(切换)', '+speed': '静步走', '+sprint': '冲刺',
+  '+attack': '开火', '+attack2': '次要攻击', '+zoom': '瞄准(ADS)',
+  '+reload': '装填弹药', '+melee': '近战攻击', '+scriptcommand3': '近战攻击(引擎指令)',
+  '+use': '交互(拾取/开门)', '+use_long': '长按交互(扶起队友)', '+useandreload': '交互并换弹',
+  '+ping': '标点 / 快速标记', 'ping_specific_type': '特定标点(敌人等)',
+  '+offhand1': '战术技能', '+offhand4': '终极技能', '+ultimate': '终极技能', '+tactical': '战术技能',
+  '+ability_held': '按住技能(手柄)', '+ability': '技能(手柄)',
+  '+pushtotalk': '按键说话', '+strafe': '侧步(按住)',
+  '+invnext': '切换下一把武器', '+invprev': '切换上一把武器', '+invnextnpg': '切换下一把武器(小键盘兼容)',
+  '+slot1': '切换到 1 号武器位', '+slot2': '切换到 2 号武器位', '+slot3': '切换到 3 号武器位',
+  'weaponselectprimary0': '选择主武器 1', 'weaponselectprimary1': '选择主武器 2', 'weaponselectprimary2': '选择主武器槽 3',
+  'weaponselectordnance': '选择投掷物', 'weapon_inspect': '检视武器',
+  'toggle_inventory': '打开 / 关闭物品栏', 'toggle_map': '打开 / 关闭地图', 'toggle_scores': '打开计分板',
+  'ingamemenu_activate': '打开游戏菜单', '+map': '按住查看地图', '+scores': '按住查看计分板',
+  'chat_wheel': '聊天轮盘', 'say_team': '队伍文字发言', '+voicerecord': '语音发言',
+  '+scriptcommand2': '引擎功能指令 2(手柄特化)', '+scriptcommand4': '引擎功能指令 4(手板特化)',
+  '+scriptcommand5': '引擎功能指令 5(手柄特化)', '+scriptcommand6': '引擎功能指令 6(手柄特化)',
+  '+scriptcommand7': '引擎功能指令 7(手柄特化)', 'exec': '执行外部 cfg 脚本',
+  '+inspect': '检视武器', '+showscores': '按住查看计分板', 'toggle_duck': '蹲下(切换)',
+  '+spectate_next': '观战切换下一位', '+spectate_previous': '观战切换上一位',
+}
+
+function cfgBindZh(cmdRaw) {
+  const s = String(cmdRaw).trim().replace(/^"/, '').replace(/"$/, '').trim()
+  if (!s) return ''
+  // 消耗品特化(use_consumable HEALTH_SMALL 等)
+  const consum = s.match(/^use_consumable\s+(\w+)/i)
+  if (consum) return CFG_CONSUMABLE_ZH[consum[1].toUpperCase()] || '使用消耗品'
+  // 组合指令(如 +jump; +moveleft; +forward → 逐段翻译后拼接)
+  if (s.includes(';')) {
+    const parts = s.split(';').map(t => t.trim()).filter(Boolean)
+      .map(t => CFG_BIND_ZH[t.toLowerCase()] || null)
+    if (parts.length && parts.every(Boolean)) return parts.join(' + ')
+    return '组合指令(详见原文)'
+  }
+  // 引擎编号指令(+scriptCommand N / +ability N / +ability_held N)
+  const sc = s.match(/^\+scriptcommand\s*(\d+)$/i)
+  if (sc) return '引擎功能指令 ' + sc[1]
+  const ab = s.match(/^\+(ability_held|ability)\s+(\d+)$/i)
+  if (ab) return (ab[1].toLowerCase() === 'ability_held' ? '按住技能 ' : '技能 ') + ab[2] + '(手柄)'
+  const first = s.split(/\s+/)[0].toLowerCase()
+  return CFG_BIND_ZH[first] || ''
+}
+
+// 配置参数(键)中文:实测 videoconfig.cfg 全部 setting.* + boot 指令类(大小写不敏感)
+const CFG_PARAM_ZH = {
+  'setting.cl_gib_allow': '血肉碎块(机体碎片)效果开关',
+  'setting.cl_particle_fallback_base': '粒子降级基准档位',
+  'setting.cl_particle_fallback_multiplier': '粒子降级倍率',
+  'setting.cl_ragdoll_maxcount': '布娃娃(尸体)最大数量',
+  'setting.cl_ragdoll_self_collision': '布娃娃自身碰撞检测',
+  'setting.mat_forceaniso': '各向异性过滤倍率',
+  'setting.mat_mip_linear': '材质线性过滤(去模糊文本)',
+  'setting.stream_memory': '资源流送内存缓冲',
+  'setting.mat_picmip': '材质贴图分辨率(数值越大越糊)',
+  'setting.particle_cpu_level': 'CPU 粒子特效等级',
+  'setting.r_createmodeldecals': '模型贴花(弹孔等)生成',
+  'setting.r_decals': '贴花(弹痕)数量上限',
+  'setting.r_lod_switch_scale': '模型细节距离缩放(LOD 等级)',
+  'setting.shadow_enable': '动态阴影开关',
+  'setting.shadow_depth_dimen_min': '阴影贴图最小尺寸',
+  'setting.shadow_depth_upres_factor_max': '阴影精度提升上限',
+  'setting.shadow_maxdynamic': '动态阴影数量上限',
+  'setting.ssao_enabled': '环境光遮蔽(SSAO)开关',
+  'setting.ssao_downsample': '环境光遮蔽降采样倍率',
+  'setting.dvs_enable': '动态分辨率(DVS)开关',
+  'setting.dvs_gpuframetime_min': 'DVS 目标帧时间下限(微秒)',
+  'setting.dvs_gpuframetime_max': 'DVS 目标帧时间上限(微秒)',
+  'setting.defaultres': '分辨率 - 宽(像素)',
+  'setting.defaultresheight': '分辨率 - 高(像素)',
+  'setting.fullscreen': '全屏模式(1=全屏)',
+  'setting.nowindowborder': '无边框窗口化',
+  'setting.volumetric_lighting': '体积光(丁达尔光束)',
+  'setting.mat_vsync_mode': '垂直同步模式',
+  'setting.mat_backbuffer_count': '渲染缓冲帧数',
+  'setting.mat_antialias_mode': '抗锯齿模式',
+  'setting.csm_enabled': '级联阴影(CSM)开关',
+  'setting.csm_coverage': '级联阴影覆盖范围',
+  'setting.csm_cascade_res': '级联阴影纹理分辨率',
+  'setting.fadeDistScale': '远景淡出距离缩放',
+  'setting.fade': '远景淡出距离(旧版键名)',
+  'setting.dvs_supersample_enable': 'DVS 超采样开关',
+  'setting.gamma': '伽马(画面亮度)',
+  'setting.configversion': '配置文件版本号',
+  'setting.cpu_level': 'CPU 画质总档位',
+  'setting.gpu_level': 'GPU 画质总档位',
+  'setting.r_fullscreen_gamma': '全屏模式伽马',
+  // 指令类(autoexec / user_config 常见)
+  'fps_max': '游戏内帧率上限',
+  'fps_max_menu': '大厅菜单帧率上限',
+  'm_rawinput': '鼠标原始输入(绕过系统加速)',
+  'm_customaccel': '鼠标加速度(0=关闭)',
+  'm_customaccel_exponent': '鼠标加速指数',
+  'm_customaccel_max': '鼠标加速上限',
+  'm_customaccel_scale': '鼠标加速缩放',
+  'm_forward': '前后灵敏度系数',
+  'm_side': '左右平移灵敏度系数',
+  'm_pitch': '垂直(俯仰)灵敏度倍率',
+  'm_yaw': '水平(偏航)灵敏度倍率',
+  'sensitivity': '鼠标灵敏度(游戏内)',
+  'cl_fovscale': '视野大小(FOV 倍率,70-110)',
+  'cl_ragdoll_collide': '布娃娃相互碰撞',
+  'cl_showfps': '显示帧率调试信息',
+  'cl_showpos': '显示位置/速度调试',
+  'mat_queue_mode': '多线程渲染队列模式',
+  'r_alphashadow': '透明材质阴影(纱/烟)',
+  'r_jiggle_bones': '软体骨骼(摆饰)效果',
+  'voice_enable': '游戏内语音开关',
+  'voice_scale': '语音音量',
+  'localclientuid': '本地客户端 UID(勿改)',
+  'cl_invites_only_friends': '仅好友可发邀请',
+  'cl_invites_only_team': '仅队友可发邀请',
 }
 
 const CFG_DETAIL_ROW_CAP = 400
@@ -1050,14 +1175,15 @@ function cfgBuildDetailHtml(payloadText) {
         if (isBinds) {
           const keyZh = cfgKeyZh(r[0])
           const cmdZh = cfgBindZh(r[1])
-          return `<div class="kv-row3"><span class="kv-key">${esc(r[0])}${keyZh ? `<em>${esc(keyZh)}</em>` : ''}</span><span class="kv-cmd">${esc(r[1])}</span><span class="kv-zh">${cmdZh ? esc(cmdZh) : '<i>自定义指令</i>'}</span></div>`
+          return `<div class="kv-row3"><span class="kv-key">${esc(r[0])}${keyZh ? `<em>${esc(keyZh)}</em>` : ''}</span><span class="kv-cmd">${esc(r[1])}</span><span class="kv-zh">${cmdZh ? esc(cmdZh) : ''}</span></div>`
         }
-        return `<div class="kv-row"><span class="kv-k">${esc(r[0])}</span><span class="kv-v">${esc(r[1])}</span></div>`
+        const zh = CFG_PARAM_ZH[String(r[0]).toLowerCase()]
+        return `<div class="kv-row3"><span class="kv-key">${esc(r[0])}</span><span class="kv-cmd">${esc(r[1])}</span><span class="kv-zh">${zh ? esc(zh) : ''}</span></div>`
       }).join('')
       const more = groupRows.length > CFG_DETAIL_ROW_CAP
         ? `<div class="cfg-kv-title">…其余 ${groupRows.length - CFG_DETAIL_ROW_CAP} 行省略</div>`
         : ''
-      return `<div class="cfg-kv-group"><div class="cfg-kv-title">${esc(title)} · ${groupRows.length} 项${isBinds ? '(先英文原文,后中文对照)' : ''}</div>${body}${more}</div>`
+      return `<div class="cfg-kv-group"><div class="cfg-kv-title">${esc(title)} · ${groupRows.length} 项${isBinds ? '(键 / 原指令 / 中文说明)' : ''}</div>${body}${more}</div>`
     }).join('')
     return `<div class="cfg-file"><h4>${esc(name)} <button type="button" class="ghost sm" data-cfg-raw="${fIdx}">查看原文</button></h4>` +
       `<pre class="cfg-raw hidden" id="cfg-raw-${fIdx}">${esc(raw)}</pre>${html || '<div class="cfg-kv-title">(空)</div>'}</div>`
