@@ -1,0 +1,1 @@
+{"name":"apex-config-lite","productName":"ApexConfigTool","version":"1.2.0","private":true,"description":"Apex 配置工具轻量版 (Neutralino, 系统自带 WebView2)","scripts":{"build":"neu build --release","update":"neu update"},"devDependencies":{"@neutralinojs/neu":"^11.3.1","fflate":"^0.8.2"}}

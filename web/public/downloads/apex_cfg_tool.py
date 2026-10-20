@@ -1,670 +1,656 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# build: v1 (packaged by CI on windows-latest)
-"""ApexCfgTool — Apex Legends 本地配置 备份/恢复/导出/导入 工具(单文件, 仅标准库)
+"""Apex Config Tool (Python 控制台版 v2.2.0)
 
-命令:
-  scan                      定位配置目录并列出文件
-  show                      预览当前灵敏度/分辨率/键位等关键设置
-  backup  [--dir D] [--out D] [--keep N] [--force]
-                            备份当前配置(自动去重与轮转)
-  list    [--dir D]         查看本地备份列表
-  restore ZIP [--dir D] [--dry-run]
-                            恢复备份(恢复前自动为当前状态做安全包)
-  export  [-o FILE.apexcfg] [--label L] [--note N] [--dir D]
-                            导出可分享的 .apexcfg 配置文件
-  import  FILE.apexcfg [--dir D] [--dry-run]
-                            应用他人分享的配置(应用前自动安全包)
+集中管理 Apex Legends 本地配置: 灵敏度 / 键位 / 画质 全部键值一览,
+字节级备份(指纹去重 + 轮转), 与 图形版/PowerShell 版 产物互通。
 
-典型用法(Windows PowerShell / macOS / Linux 通用):
-  python apex_cfg_tool.py backup
+用法:
+  python apex_cfg_tool.py            # 交互菜单
+  python apex_cfg_tool.py show       # 显示明细(可加 -f 关键字筛选)
+  python apex_cfg_tool.py backup -k 20
   python apex_cfg_tool.py list
-  python apex_cfg_tool.py restore apex-backup-20250101-120000.zip
-  python apex_cfg_tool.py export -o 我的配置.apexcfg --note 微波炉灵敏度
-  python apex_cfg_tool.py import 队友分享.apexcfg
+  python apex_cfg_tool.py restore -z <zip>
+  python apex_cfg_tool.py export -o <file.apexcfg> -t 标题 -n 备注
+  python apex_cfg_tool.py import -s <file.apexcfg>
+无需第三方依赖, Python 3.8+ 即可。
 """
-from __future__ import annotations
-
 import argparse
 import base64
-import datetime
 import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
+import time
 import zipfile
-from pathlib import Path
 
-TOOL_VERSION = "1.0.0"
+TOOL_VERSION = "2.2.0"
 FORMAT_VERSION = 1
-
-CONFIG_SUFFIXES = (".cfg", ".txt", ".ini")
-EXPORT_SUFFIX = ".apexcfg"
+MAX_FILE_BYTES = 8 * 1024 * 1024
+MAX_TOTAL_BYTES = 32 * 1024 * 1024
+MAX_FILES = 64
 BACKUP_PREFIX = "apex-backup-"
-SAFETY_PREFIXES = ("pre-restore-", "pre-import-")
+INCLUDE_SUFFIX = (".cfg", ".txt", ".ini")
 
-MAX_FILE_BYTES = 8 * 1024 * 1024          # 单个配置文件上限(正常 < 100KB)
-MAX_TOTAL_BYTES = 32 * 1024 * 1024        # 一次快照总体积上限
-MAX_FILES = 64                            # 一次快照/导入文件数上限
-BACKUP_KEEP_DEFAULT = 20                  # 备份轮转默认保留份数
-HASH_CHUNK = 256 * 1024                   # 流式哈希切片大小
-
-ZIPPED_ENTRY_PREFIX = "files/"
-MANIFEST_NAME = "manifest.json"
-
-PREVIEW_SENS_MAX = 12                     # 预览最多展示的灵敏度键
-PREVIEW_VIDEO_MAX = 10                    # 预览最多展示的画质键
+RE_QUOTED = re.compile(r'"([^"\r\n]+)"\s+"([^"\r\n]*)"')
+RE_BARE = re.compile(r"^\s*([A-Za-z0-9_.-]+)\s+(-?[A-Za-z0-9_.]+)\s*$")
+RE_BIND_LINE = re.compile(r"^[ \t]*bind\b", re.MULTILINE)
 
 
-class ToolError(Exception):
-    """带用户可读信息的业务错误, main 中统一转为退出码 1。"""
+# ─────────────────────────── 基础工具 ───────────────────────────
+
+def pad2(number):
+    return f"{number:02d}"
 
 
-# ---------------------------------------------------------------------------
-# 基础工具
-# ---------------------------------------------------------------------------
-
-def utc_now_iso() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+def stamp(moment=None):
+    moment = moment or time.localtime()
+    return (f"{moment.tm_year}{pad2(moment.tm_mon)}{pad2(moment.tm_mday)}"
+            f"-{pad2(moment.tm_hour)}{pad2(moment.tm_min)}{pad2(moment.tm_sec)}")
 
 
-def slug_now() -> str:
-    return datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+def fmt_size(num):
+    if num >= 1048576:
+        return f"{num / 1048576:.1f}MB"
+    if num >= 1024:
+        return f"{num / 1024:.1f}KB"
+    return f"{math_floor(num)}B"
 
 
-def sha256_bytes(data: bytes) -> str:
+def math_floor(num):
+    return int(num)
+
+
+def fmt_time(epoch):
+    moment = time.localtime(epoch)
+    return (f"{moment.tm_year}-{pad2(moment.tm_mon)}-{pad2(moment.tm_mday)} "
+            f"{pad2(moment.tm_hour)}:{pad2(moment.tm_min)}:{pad2(moment.tm_sec)}")
+
+
+def iso_now():
+    return time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
+
+
+def utf8_bytes(text):
+    return text.encode("utf-8")
+
+
+def sha256_hex(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as f:
-        while chunk := f.read(HASH_CHUNK):
-            digest.update(chunk)
-    return digest.hexdigest()
+def status(msg):
+    print(f"» {msg}")
 
 
-def human_size(num: int) -> str:
-    value = float(num)
-    for unit in ("B", "KB", "MB", "GB"):
-        if value < 1024 or unit == "GB":
-            return f"{value:.1f}{unit}" if unit != "B" else f"{int(value)}B"
-        value /= 1024
-    return f"{value:.1f}GB"
-
-
-def print_header(title: str) -> None:
-    print(f"\n== {title} " + "=" * max(0, 46 - len(title)))
-
-
-def atomic_write_bytes(dest: Path, data: bytes) -> None:
-    """临时文件 + 同目录原子替换, 避免半写损坏原文件。"""
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(dir=str(dest.parent), prefix=".tmp-apex-")
+def pause():
     try:
-        with os.fdopen(fd, "wb") as f:
-            f.write(data)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp_name, dest)
-    except BaseException:
-        if os.path.exists(tmp_name):
-            os.unlink(tmp_name)
-        raise
+        input("\n回车返回菜单…")
+    except EOFError:
+        pass
 
 
-# ---------------------------------------------------------------------------
-# 配置目录定位与快照
-# ---------------------------------------------------------------------------
+# ─────────────────────────── 目录定位 ───────────────────────────
 
-def candidate_config_dirs() -> list[Path]:
-    home = Path.home()
-    return [
-        home / "Saved Games" / "Respawn" / "Apex" / "local",
-        home / "Documents" / "Respawn" / "Apex" / "local",
-        home / "OneDrive" / "Documents" / "Respawn" / "Apex" / "local",
+def candidate_dirs():
+    home = os.path.expanduser("~")
+    documents = os.path.join(home, "Documents")
+    onedrive = os.environ.get("OneDrive")
+    options = [
+        os.path.join(home, "Saved Games", "Respawn", "Apex", "local"),
+        os.path.join(documents, "Respawn", "Apex", "local"),
+        os.path.join(home, "OneDrive", "Documents", "Respawn", "Apex", "local"),
     ]
+    if onedrive:
+        options.append(os.path.join(onedrive, "Documents", "Respawn", "Apex", "local"))
+    return options
 
 
-def resolve_config_dir(explicit: str | None, create: bool = False) -> Path:
-    if explicit:
-        cfg_dir = Path(explicit).expanduser().resolve()
+def backups_dir(local_dir):
+    return os.path.join(os.path.dirname(local_dir), "apex-backups")
+
+
+def resolve_dir(explicit="", create=False):
+    raw = (explicit or "").strip()
+    if raw:
+        full = raw
+        if full == "~":
+            full = os.path.expanduser("~")
+        elif full.startswith(("~/", "~\\")):
+            full = os.path.join(os.path.expanduser("~"), full[2:])
+        full = os.path.abspath(full)
         if create:
-            cfg_dir.mkdir(parents=True, exist_ok=True)
-        if not cfg_dir.is_dir():
-            raise ToolError(f"目录不存在: {cfg_dir}")
-        return cfg_dir
-
-    found = [c for c in candidate_config_dirs() if c.is_dir()]
-    if found:
-        if len(found) > 1:
-            print("提示: 检测到多个候选目录, 使用第一个(可加 --dir 指定):")
-            for c in found:
-                print(f"  - {c}")
-        return found[0]
-
+            os.makedirs(full, exist_ok=True)
+        if not os.path.isdir(full):
+            raise FileNotFoundError(f"目录不存在: {full}")
+        return full
+    for option in candidate_dirs():
+        if os.path.isdir(option):
+            return option
     if create:
-        default = candidate_config_dirs()[0]
-        default.mkdir(parents=True, exist_ok=True)
-        print(f"未找到现有配置目录, 已新建: {default}")
-        return default
-
-    raise ToolError(
-        "未找到 Apex 配置目录, 已尝试:\n  "
-        + "\n  ".join(str(c) for c in candidate_config_dirs())
-        + "\n请用 --dir 手动指定, 例如 --dir \"C:\\Users\\你\\Saved Games\\Respawn\\Apex\\local\""
-    )
+        made = candidate_dirs()[0]
+        os.makedirs(made, exist_ok=True)
+        return made
+    raise FileNotFoundError("未找到 Apex 配置目录, 已尝试:\n  " + "\n  ".join(candidate_dirs())
+                            + "\n请用 --dir 指定配置目录路径")
 
 
-def backups_dir_for(cfg_dir: Path, override: str | None) -> Path:
-    path = Path(override).expanduser() if override else cfg_dir.parent / "apex-backups"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+def pick_dir_interactive():
+    options = candidate_dirs()
+    print("\n可用候选目录:")
+    for index, option in enumerate(options, 1):
+        mark = "√ 有" if os.path.isdir(option) else "  无"
+        print(f"  {index}. [{mark}] {option}")
+    raw = input("回车自动检测 / 输入序号 / 直接粘贴目录路径: ").strip()
+    if not raw:
+        return resolve_dir(create=False)
+    if raw.isdigit() and 1 <= int(raw) <= len(options):
+        return resolve_dir(options[int(raw) - 1], create=False)
+    return resolve_dir(raw, create=True)
 
 
-def iter_config_files(cfg_dir: Path) -> list[Path]:
-    """目录内按文件名排序的配置文件列表(白名单后缀 + 体积上限)。"""
-    results: list[Path] = []
-    for root, _dirs, files in os.walk(cfg_dir, followlinks=False):
-        for name in sorted(files):
-            path = Path(root) / name
-            if path.suffix.lower() not in CONFIG_SUFFIXES:
-                continue
-            size = path.stat().st_size
-            if size > MAX_FILE_BYTES:
-                print(f"警告: 跳过过大文件({human_size(size)}): {path}")
-                continue
-            results.append(path)
-    return results
+# ─────────────────────────── 快照与清单 ───────────────────────────
+
+def list_config_files(root_dir):
+    found = []
+    for current, _dirs, names in os.walk(root_dir):
+        for name in names:
+            if name.lower().endswith(INCLUDE_SUFFIX):
+                found.append(os.path.join(current, name))
+    found.sort()
+    return found
 
 
-def make_snapshot(cfg_dir: Path) -> list[dict]:
-    """读取全部配置文件到内存(Apex 配置总量通常 < 100KB)。"""
-    entries = []
+def snapshot(local_dir):
+    items = []
+    warnings = []
     total = 0
-    for path in iter_config_files(cfg_dir):
-        rel = path.relative_to(cfg_dir).as_posix()
-        data = path.read_bytes()
+    for file_path in list_config_files(local_dir):
+        with open(file_path, "rb") as handle:
+            data = handle.read()
         total += len(data)
         if total > MAX_TOTAL_BYTES:
-            raise ToolError(f"配置文件总体积超过上限 {human_size(MAX_TOTAL_BYTES)}, 请手动清理无关文件")
-        entries.append({"name": rel, "data": data, "size": len(data), "sha256": sha256_bytes(data)})
-    return entries
+            raise ValueError(f"配置文件总体积超过上限 {fmt_size(MAX_TOTAL_BYTES)}")
+        if len(data) > MAX_FILE_BYTES:
+            warnings.append(f"警告: 跳过大文件({fmt_size(len(data))}): {os.path.basename(file_path)}")
+            total -= len(data)
+            continue
+        rel = os.path.relpath(file_path, local_dir).replace(os.sep, "/")
+        items.append({"name": rel, "data": data, "hex": sha256_hex(data)})
+    return items, warnings
 
 
-def snapshots_fingerprint(entries: list[dict]) -> str:
-    joined = "\n".join(f"{e['name']}:{e['sha256']}" for e in sorted(entries, key=lambda x: x["name"]))
-    return sha256_bytes(joined.encode("utf-8"))
+def fingerprint_of(items):
+    lines = "\n".join(f"{it['name']}:{it['hex']}" for it in sorted(items, key=lambda it: it["name"]))
+    return sha256_hex(utf8_bytes(lines))
 
 
-# ---------------------------------------------------------------------------
-# 宽容解析(仅用于预览展示; 备份/恢复为字节级, 不依赖解析结果)
-# ---------------------------------------------------------------------------
-
-QUOTED_PAIR_RE = re.compile(r'"([^"\n]+)"\s+"([^"\n]*)"')
-BARE_PAIR_RE = re.compile(r'^\s*([A-Za-z0-9_.-]+)\s+(-?[A-Za-z0-9_.]+)\s*$', re.M)
-BIND_LINE_RE = re.compile(r'(?im)^\s*bind\b')
-
-
-def build_preview(entries: list[dict]) -> dict:
-    sensitivity: dict[str, str] = {}
-    video: dict[str, str] = {}
-    binds_count = 0
-
-    for entry in entries:
-        text = entry["data"].decode("utf-8", errors="replace")
-        pairs: dict[str, str] = {}
-        for key, value in QUOTED_PAIR_RE.findall(text):
-            pairs[key.strip()] = value.strip()
-        for key, value in BARE_PAIR_RE.findall(text):
-            pairs.setdefault(key.strip(), value.strip())
-        binds_count += len(BIND_LINE_RE.findall(text))
-        # 引号键值对风格(如 "binding_forward" "w")的键也计入
-        binds_count += sum(1 for key in pairs if "bind" in key.lower())
-
-        for key, value in pairs.items():
-            low = key.lower()
-            if "sens" in low and low not in sensitivity:
-                try:
-                    float(value)
-                except ValueError:
-                    continue
-                sensitivity[low] = value
-            elif ("defaultres" in low or low in ("setting.fullscreen", "aspectratiowithletterbox")) and low not in video:
-                video[low] = value
-
-    return {
-        "sensitivity": dict(list(sensitivity.items())[:PREVIEW_SENS_MAX]),
-        "video": dict(list(video.items())[:PREVIEW_VIDEO_MAX]),
-        "binds_count": binds_count,
-        "files": [e["name"] for e in entries],
-    }
-
-
-def print_preview_card(preview: dict) -> None:
-    if preview.get("sensitivity"):
-        print("灵敏度相关:")
-        for key, value in preview["sensitivity"].items():
-            print(f"  {key} = {value}")
-    if preview.get("video"):
-        print("画质/分辨率相关:")
-        for key, value in preview["video"].items():
-            print(f"  {key} = {value}")
-    print(f"键位(binds)条目: {preview.get('binds_count', 0)}")
-
-
-# ---------------------------------------------------------------------------
-# 备份 zip 读写
-# ---------------------------------------------------------------------------
-
-def build_manifest(kind: str, entries: list[dict], fingerprint: str) -> dict:
+def new_manifest(kind, items, fingerprint):
     return {
         "kind": kind,
         "tool_version": TOOL_VERSION,
-        "created_at": utc_now_iso(),
+        "created_at": iso_now(),
         "fingerprint": fingerprint,
-        "files": [{"name": e["name"], "size": e["size"], "sha256": e["sha256"]} for e in entries],
+        "files": [{"name": it["name"], "size": len(it["data"]), "sha256": it["hex"]} for it in items],
     }
 
 
-def write_backup_zip(dest: Path, entries: list[dict], manifest: dict) -> None:
-    fd, tmp_name = tempfile.mkstemp(dir=str(dest.parent), prefix=".tmp-apex-")
-    os.close(fd)
-    try:
-        now = datetime.datetime.now().timetuple()[:6]
-        with zipfile.ZipFile(tmp_name, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
-            info = zipfile.ZipInfo(MANIFEST_NAME, date_time=now)
-            zf.writestr(info, json.dumps(manifest, ensure_ascii=False, indent=2))
-            for entry in entries:
-                zf.writestr(zipfile.ZipInfo(ZIPPED_ENTRY_PREFIX + entry["name"], date_time=now), entry["data"])
-        os.replace(tmp_name, dest)
-    except BaseException:
-        if os.path.exists(tmp_name):
-            os.unlink(tmp_name)
-        raise
+def write_backup_zip(zip_path, items, manifest):
+    os.makedirs(os.path.dirname(zip_path), exist_ok=True)
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        for item in items:
+            zf.writestr("files/" + item["name"], item["data"])
 
 
-def read_backup_manifest(zip_path: Path) -> dict:
-    try:
-        with zipfile.ZipFile(zip_path) as zf:
-            raw = zf.read(MANIFEST_NAME)
-        manifest = json.loads(raw)
-    except (zipfile.BadZipFile, KeyError, json.JSONDecodeError) as err:
-        raise ToolError(f"备份文件损坏或不是本工具生成的包: {err}") from err
-    if not isinstance(manifest, dict) or "files" not in manifest:
-        raise ToolError("manifest.json 缺少 files 字段, 备份可能来自其他工具")
-    return manifest
-
-
-# 同一秒内可能连续备份, 冲突时追加序号, 避免覆盖
-def next_backup_path(backups: Path, slug: str) -> Path:
-    dest = backups / f"{BACKUP_PREFIX}{slug}.zip"
+def unique_dest(directory, base):
+    dest = os.path.join(directory, base + ".zip")
     serial = 2
-    while dest.exists():
-        dest = backups / f"{BACKUP_PREFIX}{slug}-{serial}.zip"
+    while os.path.exists(dest):
+        dest = os.path.join(directory, f"{base}-{serial}.zip")
         serial += 1
     return dest
 
 
-def newest_backup(backups: Path) -> Path | None:
-    zips = list(backups.glob(BACKUP_PREFIX + "*.zip"))
-    if not zips:
+def read_manifest(zip_path):
+    with zipfile.ZipFile(zip_path) as zf:
+        if "manifest.json" not in zf.namelist():
+            raise ValueError("备份包缺少 manifest.json, 不是本工具生成的包")
+        return json.loads(zf.read("manifest.json").decode("utf-8"))
+
+
+def newest_backup(backup_dir):
+    if not os.path.isdir(backup_dir):
         return None
-    return max(zips, key=lambda p: (p.stat().st_mtime, p.name))
+    candidates = [os.path.join(backup_dir, name) for name in os.listdir(backup_dir)
+                  if name.lower().endswith(".zip") and name.startswith(BACKUP_PREFIX)]
+    candidates.sort(key=os.path.getmtime, reverse=True)
+    for path in candidates:
+        try:
+            manifest = read_manifest(path)
+            return {"name": os.path.basename(path), "fingerprint": str(manifest.get("fingerprint", ""))}
+        except Exception:
+            return None
+    return None
 
 
-def rotate_backups(backups: Path, keep: int) -> int:
-    zips = sorted(backups.glob(BACKUP_PREFIX + "*.zip"), key=lambda p: (p.stat().st_mtime, p.name))
-    removed = 0
-    for old in zips[:-keep] if keep > 0 else zips:
-        old.unlink()
-        removed += 1
+def rotate_backups(backup_dir, keep):
+    if not os.path.isdir(backup_dir):
+        return []
+    all_zips = [os.path.join(backup_dir, n) for n in os.listdir(backup_dir) if n.lower().endswith(".zip")]
+    all_zips.sort(key=os.path.getmtime, reverse=True)
+    removed = []
+    for path in all_zips[max(0, keep):]:
+        try:
+            os.remove(path)
+            removed.append(os.path.basename(path))
+        except OSError:
+            pass
     return removed
 
 
-def create_safety_backup(cfg_dir: Path, backups: Path, tag: str) -> Path | None:
-    """覆盖/导入前把当前状态打安全包; 目录为空则返回 None。"""
-    entries = make_snapshot(cfg_dir)
-    if not entries:
-        return None
-    dest = backups / f"{tag}-{slug_now()}.zip"
-    manifest = build_manifest(f"safety:{tag}", entries, snapshots_fingerprint(entries))
-    write_backup_zip(dest, entries, manifest)
-    return dest
+# ─────────────────────────── 核心操作 ───────────────────────────
+
+def op_backup(explicit_dir, keep=20, force=False):
+    local_dir = resolve_dir(explicit_dir)
+    target_dir = backups_dir(local_dir)
+    os.makedirs(target_dir, exist_ok=True)
+    items, warnings = snapshot(local_dir)
+    for line in warnings:
+        status(line)
+    if not items:
+        raise ValueError(f"目录中没有可识别的配置文件({'/'.join(INCLUDE_SUFFIX)}): {local_dir}")
+    fingerprint = fingerprint_of(items)
+    keep = max(1, int(keep or 20))
+    newest = newest_backup(target_dir)
+    if newest and newest["fingerprint"] == fingerprint and not force:
+        rotate_backups(target_dir, keep)
+        return {"ok": True, "skipped": True,
+                "message": f"配置无变化, 跳过备份(与 {newest['name']} 相同)"}
+    dest = unique_dest(target_dir, BACKUP_PREFIX + stamp())
+    write_backup_zip(dest, items, new_manifest("backup", items, fingerprint))
+    removed = rotate_backups(target_dir, keep)
+    return {"ok": True, "skipped": False, "path": dest, "files": len(items),
+            "fingerprint": fingerprint[:16], "removed": removed}
 
 
-# ---------------------------------------------------------------------------
-# 分享文件(.apexcfg)编解码与校验
-# ---------------------------------------------------------------------------
+def op_list(explicit_dir):
+    local_dir = resolve_dir(explicit_dir)
+    target_dir = backups_dir(local_dir)
+    rows = []
+    if os.path.isdir(target_dir):
+        for name in sorted(os.listdir(target_dir)):
+            if not name.lower().endswith(".zip"):
+                continue
+            path = os.path.join(target_dir, name)
+            try:
+                stat = os.stat(path)
+            except OSError:
+                continue
+            kind, file_count, fingerprint = "备份包", "", ""
+            try:
+                manifest = read_manifest(path)
+                raw_kind = str(manifest.get("kind", ""))
+                kind = ("手动备份" if raw_kind == "backup"
+                        else "安全包(自动)" if raw_kind.startswith("safety:")
+                        else raw_kind or "未知")
+                file_count = len(manifest.get("files", []))
+                fingerprint = str(manifest.get("fingerprint", ""))[:16]
+            except Exception:
+                kind = "无法读取(损坏?)"
+            rows.append((name, fmt_time(stat.st_mtime), file_count, kind, fingerprint, fmt_size(stat.st_size)))
+    rows.sort(reverse=True)
+    return local_dir, target_dir, rows
 
-def sanitize_rel_name(name: str) -> str:
-    """净化包内相对路径, 拒绝穿越/反斜杠/空段。"""
-    if not isinstance(name, str) or not name or "\x00" in name:
-        raise ToolError(f"非法文件名: {name!r}")
-    normalized = name.replace("\\", "/").lstrip("/")
-    parts = normalized.split("/")
-    if not normalized or any(part in ("", ".", "..") for part in parts):
-        raise ToolError(f"非法文件名(疑似路径穿越): {name!r}")
+
+def valid_config_name(name):
+    text = str(name or "")
+    if not text.strip() or "\0" in text:
+        return False
+    if text.startswith("/") or text.startswith("\\"):
+        return False
+    parts = re.split(r"[\\/]", text)
     if len(parts) > 4:
-        raise ToolError(f"文件名嵌套过深: {name!r}")
-    return "/".join(parts)
+        return False
+    for part in parts:
+        if not part or part in (".", ".."):
+            return False
+    dot = text.rfind(".")
+    return dot > 0 and text[dot:].lower() in INCLUDE_SUFFIX
 
 
-def decode_share_files(files_obj: dict) -> list[dict]:
-    """校验并解码 .apexcfg 的 files 字段, 返回与 make_snapshot 同构的 items。"""
-    if not isinstance(files_obj, dict) or not files_obj:
-        raise ToolError("分享文件中没有任何配置文件内容")
-    if len(files_obj) > MAX_FILES:
-        raise ToolError(f"文件数量超过上限 {MAX_FILES}")
-
-    entries, total = [], 0
-    for rel, meta in files_obj.items():
-        name = sanitize_rel_name(rel)
-        if Path(name).suffix.lower() not in CONFIG_SUFFIXES:
-            raise ToolError(f"文件后缀不在白名单({', '.join(CONFIG_SUFFIXES)}): {name}")
-        if not isinstance(meta, dict) or not isinstance(meta.get("b64"), str):
-            raise ToolError(f"文件 {name} 缺少 b64 内容")
-        try:
-            data = base64.b64decode(meta["b64"], validate=True)
-        except (ValueError, TypeError) as err:
-            raise ToolError(f"文件 {name} 的 base64 内容无效: {err}") from err
-        if len(data) > MAX_FILE_BYTES:
-            raise ToolError(f"文件 {name} 超过单文件上限 {human_size(MAX_FILE_BYTES)}")
-        total += len(data)
-        if total > MAX_TOTAL_BYTES:
-            raise ToolError(f"解压后总体积超过上限 {human_size(MAX_TOTAL_BYTES)}")
-        expected_sha = meta.get("sha256")
-        if isinstance(expected_sha, str) and expected_sha.lower() != sha256_bytes(data):
-            raise ToolError(f"文件 {name} 校验失败: hash 与内容不一致")
-        entries.append({"name": name, "data": data, "size": len(data), "sha256": sha256_bytes(data)})
-    return entries
-
-
-def parse_share_file(path: Path) -> dict:
-    if not path.is_file():
-        raise ToolError(f"文件不存在: {path}")
-    if path.stat().st_size > 64 * 1024 * 1024:
-        raise ToolError("分享文件过大(>64MB), 疑似损坏")
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError) as err:
-        raise ToolError(f"分享文件不是有效 JSON: {err}") from err
-    if payload.get("kind") != "apexcfg" or payload.get("format") != FORMAT_VERSION:
-        raise ToolError("不支持的分享格式(缺少 kind=apexcfg 或 format 不匹配), 请让对方更新工具后重新导出")
-    return payload
-
-
-def write_entries_to(cfg_dir: Path, entries: list[dict]) -> tuple[list[str], list[str]]:
-    """逐文件原子写入并复检哈希, 返回 (written, identical)。"""
+def write_verified(local_dir, entries):
     written, identical = [], []
     for entry in entries:
-        dest = cfg_dir / Path(*entry["name"].split("/"))
-        if dest.is_file() and dest.stat().st_size == entry["size"] and sha256_file(dest) == entry["sha256"]:
-            identical.append(entry["name"])
-            continue
-        atomic_write_bytes(dest, entry["data"])
-        if sha256_file(dest) != entry["sha256"]:
-            raise ToolError(f"写入后校验失败, 文件可能异常: {dest}")
+        target = os.path.join(local_dir, *entry["name"].split("/"))
+        if os.path.exists(target):
+            with open(target, "rb") as handle:
+                if handle.read() == entry["data"]:
+                    identical.append(entry["name"])
+                    continue
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        tmp = target + ".tmp"
+        with open(tmp, "wb") as handle:
+            handle.write(entry["data"])
+        os.replace(tmp, target)
+        with open(target, "rb") as handle:
+            if sha256_hex(handle.read()) != entry["hex"]:
+                raise ValueError(f"写入后复检失败: {entry['name']}")
         written.append(entry["name"])
     return written, identical
 
 
-# ---------------------------------------------------------------------------
-# 命令实现
-# ---------------------------------------------------------------------------
-
-def cmd_scan(args: argparse.Namespace) -> None:
-    print_header("候选配置目录")
-    selected = None
-    for cand in candidate_config_dirs():
-        mark = "√" if cand.is_dir() else "×"
-        print(f" [{mark}] {cand}")
-        if cand.is_dir() and selected is None:
-            selected = cand
-
-    print_header("选择结果")
-    if not selected and args.dir:
-        selected = resolve_config_dir(args.dir)
-    if not selected:
-        print("未找到, 请用 --dir 指定")
-        return
-
-    entries = make_snapshot(selected)
-    print(f"当前使用: {selected}")
-    total = 0
-    for entry in entries:
-        print(f"  {entry['name']:<28} {human_size(entry['size'])}")
-        total += entry["size"]
-    print(f"合计 {len(entries)} 个文件, {human_size(total)}")
+def share_entries(share):
+    names = list(share.get("files", {}).keys())
+    if not names:
+        raise ValueError("分享文件中没有包含任何配置文件")
+    if len(names) > MAX_FILES:
+        raise ValueError(f"文件数量超过上限 {MAX_FILES}")
+    entries = []
+    for name in names:
+        if not valid_config_name(name):
+            raise ValueError(f"非法文件名(路径穿越或后缀不在白名单): {name}")
+        meta = share["files"][name]
+        data = base64.b64decode(str(meta.get("b64", "")))
+        if len(data) > MAX_FILE_BYTES:
+            raise ValueError(f"分享文件过大(>8.0MB): {name}")
+        if sha256_hex(data) != str(meta.get("sha256", "")).lower():
+            raise ValueError(f"文件 {name} 校验失败: hash 与内容不一致")
+        entries.append({"name": name, "data": data, "hex": str(meta["sha256"]).lower()})
+    return entries
 
 
-def cmd_show(args: argparse.Namespace) -> None:
-    cfg_dir = resolve_config_dir(args.dir)
-    entries = make_snapshot(cfg_dir)
-    if not entries:
-        raise ToolError(f"目录中没有可识别的配置文件({', '.join(CONFIG_SUFFIXES)}): {cfg_dir}")
-    print_header(f"当前配置概览 {cfg_dir}")
-    print_preview_card(build_preview(entries))
+def safety_backup(local_dir, tag):
+    items, _warnings = snapshot(local_dir)
+    if not items:
+        return None
+    target_dir = backups_dir(local_dir)
+    os.makedirs(target_dir, exist_ok=True)
+    dest = unique_dest(target_dir, f"{tag}-{stamp()}")
+    write_backup_zip(dest, items, new_manifest(f"safety:{tag}", items, fingerprint_of(items)))
+    return dest
 
 
-def cmd_backup(args: argparse.Namespace) -> None:
-    cfg_dir = resolve_config_dir(args.dir)
-    entries = make_snapshot(cfg_dir)
-    if not entries:
-        raise ToolError(f"目录中没有可识别的配置文件: {cfg_dir}")
-
-    backups = backups_dir_for(cfg_dir, args.out)
-    fingerprint = snapshots_fingerprint(entries)
-
-    newest = newest_backup(backups)
-    if newest and not args.force:
-        last = read_backup_manifest(newest)
-        if last.get("fingerprint") == fingerprint:
-            print(f"配置无变化, 跳过备份(与 {newest.name} 相同)! 需强制请加 --force")
-            return
-
-    dest = next_backup_path(backups, slug_now())
-    write_backup_zip(dest, entries, build_manifest("backup", entries, fingerprint))
-    removed = rotate_backups(backups, args.keep)
-
-    print(f"✔ 备份完成: {dest}")
-    print(f"  文件 {len(entries)} 个, 原始 {human_size(sum(e['size'] for e in entries))}")
-    print(f"  指纹 {fingerprint[:12]}  轮转清理 {removed} 份旧备份")
-
-
-def cmd_list(args: argparse.Namespace) -> None:
-    cfg_dir = resolve_config_dir(args.dir)
-    backups = backups_dir_for(cfg_dir, None)
-    zips = sorted(backups.glob("*.zip"))
-    if not zips:
-        print(f"暂无备份: {backups}")
-        return
-
-    print_header(f"备份列表 {backups}")
-    for idx, zp in enumerate(zips, 1):
-        try:
-            manifest = read_backup_manifest(zp)
-            files = len(manifest.get("files", []))
-            created = str(manifest.get("created_at", "-"))[:19].replace("T", " ")
-            kind = str(manifest.get("kind", "?"))
-        except ToolError as err:
-            print(f" [{idx}] {zp.name}  <无法解析: {err}>")
-            continue
-        print(f" [{idx}] {zp.name}")
-        print(f"      {created} UTC · {files} 个文件 · {human_size(zp.stat().st_size)} · {kind}")
-
-
-def cmd_restore(args: argparse.Namespace) -> None:
-    zip_path = Path(args.archive).expanduser()
-    manifest = read_backup_manifest(zip_path)
-    files = manifest.get("files", [])
-    print_header(f"恢复预览 {zip_path.name}({len(files)} 个文件)")
-    for f in files:
-        print(f"  {f.get('name', '?'):<28} {human_size(int(f.get('size') or 0))}")
-    if args.dry_run:
-        print("(dry-run, 未写入任何文件)")
-        return
-    if not files:
-        print("备份内容为空, 无需恢复")
-        return
-
-    cfg_dir = resolve_config_dir(args.dir, create=bool(args.dir))
-    backups = backups_dir_for(cfg_dir, None)
-    safety = create_safety_backup(cfg_dir, backups, "pre-restore")
-    print(f"已生成安全包: {safety}" if safety else "当前目录为空, 无需安全包")
-
+def op_restore(zip_path, explicit_dir):
+    if not os.path.exists(zip_path):
+        raise FileNotFoundError(f"文件不存在: {zip_path}")
+    local_dir = resolve_dir(explicit_dir, create=True)
+    manifest = read_manifest(zip_path)
+    kind = str(manifest.get("kind", ""))
+    if kind != "backup" and not kind.startswith("safety:"):
+        raise ValueError(f"不支持的备份包(kind={kind or '空'}), 可能不是本工具生成")
+    metas = manifest.get("files", [])
+    if not metas:
+        raise ValueError("备份包内没有可恢复的配置文件")
+    if len(metas) > MAX_FILES:
+        raise ValueError(f"文件数量超过上限 {MAX_FILES}")
+    entries = []
     with zipfile.ZipFile(zip_path) as zf:
-        entries = decode_share_files(
-            {
-                f["name"]: {"b64": base64.b64encode(zf.read(ZIPPED_ENTRY_PREFIX + f["name"])).decode("ascii")}
-                for f in files
-            }
-        )
-    written, identical = write_entries_to(cfg_dir, entries)
-    print(f"✔ 恢复完成: 覆盖 {len(written)} 个文件, 未变化 {len(identical)} 个")
-    print("提示: 如需回滚, 用 list 找到刚才的安全包再执行 restore")
+        for meta in metas:
+            if not valid_config_name(meta["name"]):
+                raise ValueError(f"非法文件名(路径穿越或后缀不在白名单): {meta['name']}")
+            arcname = "files/" + meta["name"]
+            data = zf.read(arcname)
+            if sha256_hex(data) != str(meta["sha256"]).lower():
+                raise ValueError(f"文件 {meta['name']} 校验失败: hash 与内容不一致")
+            entries.append({"name": meta["name"], "data": data, "hex": str(meta["sha256"]).lower()})
+    safety = safety_backup(local_dir, "pre-restore")
+    written, identical = write_verified(local_dir, entries)
+    return {"from": os.path.basename(zip_path), "safety": safety,
+            "written": written, "identical": identical}
 
 
-def cmd_export(args: argparse.Namespace) -> None:
-    cfg_dir = resolve_config_dir(args.dir)
-    entries = make_snapshot(cfg_dir)
-    if not entries:
-        raise ToolError(f"目录中没有可识别的配置文件: {cfg_dir}")
+# ─────────────────────────── 分享对象 ───────────────────────────
 
-    payload = {
-        "kind": "apexcfg",
-        "format": FORMAT_VERSION,
-        "tool_version": TOOL_VERSION,
-        "game": "Apex Legends",
-        "created_at": utc_now_iso(),
-        "label": args.label or f"Apex 配置 {slug_now()}",
-        "note": args.note or "",
-        "preview": build_preview(entries),
-        "files": {
-            e["name"]: {"b64": base64.b64encode(e["data"]).decode("ascii"), "sha256": e["sha256"]}
-            for e in entries
-        },
+def parse_pairs_text(text):
+    pairs = {}
+    for match in RE_QUOTED.finditer(text):
+        pairs[match.group(1).strip()] = match.group(2).strip()
+    rows = [[key, value] for key, value in pairs.items()]
+    for line in text.splitlines():
+        bare = RE_BARE.match(line)
+        if bare and bare.group(1).strip() not in pairs:
+            rows.append([bare.group(1).strip(), bare.group(2).strip()])
+    return rows
+
+
+def build_preview(items):
+    sensitivity, video = {}, {}
+    binds = 0
+    for item in items:
+        text = item["data"].decode("utf-8", "replace")
+        for key, value in parse_pairs_text(text):
+            low = key.lower()
+            if "bind" in low and low != "bind":
+                binds += 1
+            if "sens" in low:
+                sensitivity[low] = value
+            if "defaultres" in low or low in ("setting.fullscreen", "aspectratiowithletterbox"):
+                video[low] = value
+        binds += len(RE_BIND_LINE.findall(text))
+    return {
+        "sensitivity": sensitivity, "video": video, "binds_count": binds,
+        "files": [it["name"] for it in items],
+        "file_pairs": [{"name": it["name"], "rows": parse_pairs_text(it["data"].decode("utf-8", "replace"))[:800]} for it in items],
     }
-    out = Path(args.output).expanduser() if args.output else Path(f"apex-export-{slug_now()}{EXPORT_SUFFIX}")
-
-    atomic_write_bytes(
-        out,
-        (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
-    )
-    print_header("导出完成")
-    print(f"✔ {out.resolve()}  ({human_size(out.stat().st_size)})")
-    print(f"  标签: {payload['label']}")
-    print_preview_card(payload["preview"])
-    print("分享方式: 直接把该文件发给朋友, 或在网页「Apex 配置」面板发布到分享广场")
 
 
-def cmd_import(args: argparse.Namespace) -> None:
-    share = parse_share_file(Path(args.file).expanduser())
-    entries = decode_share_files(share.get("files", {}))
-
-    print_header(f"导入预览 {Path(args.file).name}")
-    print(f"标签: {share.get('label', '-')}  来源时间: {share.get('created_at', '-')}")
-    if share.get("note"):
-        print(f"备注: {share['note']}")
-    print_preview_card(share.get("preview") or build_preview(entries))
-    if args.dry_run:
-        print("(dry-run, 未写入任何文件)")
-        return
-
-    cfg_dir = resolve_config_dir(args.dir, create=True)
-    backups = backups_dir_for(cfg_dir, None)
-    safety = create_safety_backup(cfg_dir, backups, "pre-import")
-    print(f"已生成安全包: {safety}" if safety else "原目录为空, 无需安全包")
-
-    written, identical = write_entries_to(cfg_dir, entries)
-    print(f"✔ 应用完成: 写入 {len(written)} 个文件, 已一致 {len(identical)} 个")
-    print("提示: 重启 Apex 生效; 回滚请用 list 找到上面的安全包执行 restore")
+def build_share_object(explicit_dir, label="", note=""):
+    local_dir = resolve_dir(explicit_dir)
+    items, warnings = snapshot(local_dir)
+    if not items:
+        raise ValueError(f"目录中没有可识别的配置文件({'/'.join(INCLUDE_SUFFIX)}): {local_dir}")
+    files = {it["name"]: {"b64": base64.b64encode(it["data"]).decode("ascii"), "sha256": it["hex"]} for it in items}
+    payload = {
+        "kind": "apexcfg", "format": FORMAT_VERSION, "tool_version": TOOL_VERSION,
+        "game": "Apex Legends", "created_at": iso_now(),
+        "label": (label or "").strip() or f"Apex 配置 {stamp()}",
+        "note": note or "", "preview": build_preview(items), "files": files,
+    }
+    return payload, warnings
 
 
-# ---------------------------------------------------------------------------
-# 入口
-# ---------------------------------------------------------------------------
-
-def add_dir_arg(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--dir", help="手动指定 Apex local 配置目录(默认自动检测)")
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="apex_cfg_tool",
-        description="Apex Legends 本地配置 备份/恢复/导出/导入 工具",
-    )
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    p_scan = sub.add_parser("scan", help="定位配置目录并列出文件")
-    add_dir_arg(p_scan)
-    p_scan.set_defaults(func=cmd_scan)
-
-    p_show = sub.add_parser("show", help="预览当前关键设置")
-    add_dir_arg(p_show)
-    p_show.set_defaults(func=cmd_show)
-
-    p_backup = sub.add_parser("backup", help="备份当前配置")
-    add_dir_arg(p_backup)
-    p_backup.add_argument("--out", help="备份输出目录(默认 Apex 目录同级 apex-backups/)")
-    p_backup.add_argument("--keep", type=int, default=BACKUP_KEEP_DEFAULT, help=f"保留的备份份数(默认 {BACKUP_KEEP_DEFAULT})")
-    p_backup.add_argument("--force", action="store_true", help="即使配置无变化也强制生成")
-    p_backup.set_defaults(func=cmd_backup)
-
-    p_list = sub.add_parser("list", help="查看本地备份")
-    add_dir_arg(p_list)
-    p_list.set_defaults(func=cmd_list)
-
-    p_restore = sub.add_parser("restore", help="恢复备份")
-    p_restore.add_argument("archive", help="备份 zip 路径")
-    add_dir_arg(p_restore)
-    p_restore.add_argument("--dry-run", action="store_true", help="仅预览, 不写入")
-    p_restore.set_defaults(func=cmd_restore)
-
-    p_export = sub.add_parser("export", help="导出可分享的 .apexcfg")
-    add_dir_arg(p_export)
-    p_export.add_argument("-o", "--output", help=f"输出文件(默认 apex-export-时间戳{EXPORT_SUFFIX})")
-    p_export.add_argument("--label", help="配置标签/标题")
-    p_export.add_argument("--note", help="备注(如灵敏度说明)")
-    p_export.set_defaults(func=cmd_export)
-
-    p_import = sub.add_parser("import", help="应用分享的 .apexcfg")
-    p_import.add_argument("file", help=".apexcfg 文件路径")
-    add_dir_arg(p_import)
-    p_import.add_argument("--dry-run", action="store_true", help="仅预览, 不写入")
-    p_import.set_defaults(func=cmd_import)
-
-    return parser
-
-
-def _ensure_utf8_output() -> None:
-    """Windows 管道/重定向场景 stdout 默认走 cp1252,中文帮助会 UnicodeEncodeError 崩溃;
-    console 附着时底层本就是 UTF-16 API,reconfigure 失败则静默跳过,双端都不受影响。"""
-    for _s in (sys.stdout, sys.stderr):
-        try:
-            _s.reconfigure(encoding='utf-8', errors='replace')
-        except Exception:
-            pass
-
-
-if sys.platform == 'win32':
-    _ensure_utf8_output()
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+def read_share(path):
+    with open(path, "rb") as handle:
+        raw = handle.read()
     try:
-        args.func(args)
-    except ToolError as err:
-        print(f"错误: {err}", file=sys.stderr)
-        return 1
-    except KeyboardInterrupt:
-        print("\n已取消")
-        return 130
-    return 0
+        share = json.loads(raw.decode("utf-8"))
+    except Exception as err:
+        raise ValueError(f"分享文件不是有效 JSON: {err}")
+    if not isinstance(share, dict) or share.get("kind") != "apexcfg" or share.get("format") != FORMAT_VERSION:
+        raise ValueError("不支持的分享格式(kind/format 不符), 请让对方更新工具后重新导出")
+    return share
+
+
+def op_export(explicit_dir, out_path, label, note):
+    if not out_path:
+        raise ValueError("请用 -o 指定导出位置")
+    payload, warnings = build_share_object(explicit_dir, label, note)
+    with open(out_path, "w", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    return {"path": out_path, "label": payload["label"], "files": len(payload["files"]),
+            "preview": payload["preview"], "warnings": warnings}
+
+
+def op_import(share_path, explicit_dir):
+    if not os.path.exists(share_path):
+        raise FileNotFoundError(f"文件不存在: {share_path}")
+    share = read_share(share_path)
+    entries = share_entries(share)
+    local_dir = resolve_dir(explicit_dir, create=True)
+    safety = safety_backup(local_dir, "pre-import")
+    written, identical = write_verified(local_dir, entries)
+    return {"label": share.get("label", ""), "safety": safety, "written": written, "identical": identical}
+
+
+# ─────────────────────────── 展示 ───────────────────────────
+
+def op_show(explicit_dir, keyword=""):
+    local_dir = resolve_dir(explicit_dir)
+    items, warnings = snapshot(local_dir)
+    print(f"配置目录: {local_dir}")
+    for line in warnings:
+        status(line)
+    if not items:
+        print(f"目录内没有 {INCLUDE_SUFFIX} 配置文件")
+        return
+    total = 0
+    for item in items:
+        rows = parse_pairs_text(item["data"].decode("utf-8", "replace"))
+        hit = [r for r in rows if not keyword or keyword.lower() in r[0].lower() or keyword.lower() in str(r[1]).lower()]
+        total += len(hit)
+        print(f"\n◎ {item['name']}  ({len(hit)}/{len(rows)} 条)")
+        for key, value in hit:
+            print(f"  {key:<42} = {value}")
+    print(f"\n共 {total} 条命中; 目录指纹 {fingerprint_of(items)[:16]}")
+
+
+# ─────────────────────────── 交互菜单 ───────────────────────────
+
+MENU_TEXT = """
+╔══════════════════════════════════════════╗
+║   Apex 配置工具 (Python 版 v{ver})   ║
+╠══════════════════════════════════════════╣
+║  1. 显示当前配置明细 (全部键值)          ║
+║  2. 备份当前配置                          ║
+║  3. 备份列表                              ║
+║  4. 恢复备份                              ║
+║  5. 导出 .apexcfg (发布规格)              ║
+║  6. 导入 .apexcfg (先自动生成安全包)      ║
+║  7. 打开配置目录                          ║
+║  0. 退出                                  ║
+╚══════════════════════════════════════════╝"""
+
+
+def open_in_explorer(target):
+    try:
+        if os.name == "nt":
+            os.startfile(target)  # noqa: S606 Windows 专用 API
+        elif sys.platform == "darwin":
+            subprocess.run(["open", target], check=False)
+        else:
+            subprocess.run(["xdg-open", target], check=False)
+    except Exception as err:
+        status(f"打开失败: {err}")
+
+
+def menu_once(choice, cfg_dir_holder):
+    if choice == "1":
+        keyword = input("筛选关键字(可空, 回车全量): ").strip()
+        op_show(cfg_dir_holder["dir"], keyword)
+    elif choice == "2":
+        result = op_backup(cfg_dir_holder["dir"], keep_input())
+        status(result["message"] if result["skipped"] else
+               f"已备份 {result['files']} 个文件 → {result['path']}; 指纹 {result['fingerprint']}; 清理 {len(result['removed'])} 份旧备份")
+    elif choice == "3":
+        _local, target_dir, rows = op_list(cfg_dir_holder["dir"])
+        print(f"备份夹: {target_dir}")
+        if not rows:
+            print("  (还没有备份)")
+        for name, when, count, kind, fingerprint, size in rows:
+            print(f"  {name}  {when}  {kind}  {count}文件  {size}  {fingerprint}")
+    elif choice == "4":
+        _local, _target, rows = op_list(cfg_dir_holder["dir"])
+        for index, row in enumerate(rows, 1):
+            print(f"  {index}. {row[0]}  {row[1]}  {row[3]}")
+        pick = input("输入要恢复的序号: ").strip()
+        if pick.isdigit() and 1 <= int(pick) <= len(rows):
+            path = os.path.join(_target, rows[int(pick) - 1][0])
+            result = op_restore(path, cfg_dir_holder["dir"])
+            status(f"已恢复: 写入 {len(result['written'])}, 已一致 {len(result['identical'])};"
+                   f" 安全包: {os.path.basename(result['safety']) if result['safety'] else '无'}")
+    elif choice == "5":
+        label = input("标题(可空): ").strip()
+        note = input("备注(可空): ").strip()
+        out = input("导出到(回车=桌面 Apex-分享-<时间>.apexcfg): ").strip()
+        if not out:
+            desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+            out = os.path.join(desktop, f"Apex-分享-{stamp()}.apexcfg")
+        result = op_export(cfg_dir_holder["dir"], out, label, note)
+        status(f"已导出 {result['files']} 个配置 → {result['path']}")
+    elif choice == "6":
+        share_path = input(".apexcfg 文件路径: ").strip().strip('"')
+        result = op_import(share_path, cfg_dir_holder["dir"])
+        status(f"导入完成: 写入 {len(result['written'])}, 已一致 {len(result['identical'])};"
+               f" 安全包: {os.path.basename(result['safety']) if result['safety'] else '无'}; 重启 Apex 生效")
+    elif choice == "7":
+        open_in_explorer(os.path.dirname(backups_dir(cfg_dir_holder["dir"])) or cfg_dir_holder["dir"])
+    elif choice == "0":
+        raise SystemExit(0)
+    else:
+        status("无效选项")
+
+
+def keep_input():
+    raw = input("保留份数(回车=20): ").strip()
+    return int(raw) if raw.isdigit() and int(raw) > 0 else 20
+
+
+def main():
+    if os.name == "nt":
+        os.system("")  # 启用 ANSI
+        os.system("chcp 65001 >nul 2>&1")
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+    parser = argparse.ArgumentParser(description="Apex 配置工具 (Python 控制台版)")
+    parser.add_argument("command", nargs="?", default="",
+                        choices=["", "show", "backup", "list", "restore", "export", "import"])
+    parser.add_argument("-d", "--dir", default="", help="配置目录(默认自动检测)")
+    parser.add_argument("-k", "--keep", type=int, default=20, help="备份保留份数(默认 20)")
+    parser.add_argument("--force", action="store_true", help="备份: 配置无变化也强制生成")
+    parser.add_argument("-f", "--filter", default="", help="show: 关键字筛选")
+    parser.add_argument("-z", "--zip", default="", help="restore: 备份 zip 路径")
+    parser.add_argument("-s", "--share", default="", help="import: .apexcfg 路径")
+    parser.add_argument("-o", "--out", default="", help="export: 输出 .apexcfg 路径")
+    parser.add_argument("-t", "--title", default="", help="export: 标题")
+    parser.add_argument("-n", "--note", default="", help="export: 备注")
+    args = parser.parse_args()
+
+    holder = {"dir": args.dir}
+    if not holder["dir"]:
+        try:
+            holder["dir"] = resolve_dir()
+        except FileNotFoundError:
+            holder["dir"] = pick_dir_interactive()
+    if args.command:
+        if args.command == "show":
+            op_show(holder["dir"], args.filter)
+        elif args.command == "backup":
+            result = op_backup(holder["dir"], args.keep, args.force)
+            status(result["message"] if result.get("skipped") else
+                   f"已备份 {result['files']} 个文件 → {result['path']}")
+        elif args.command == "list":
+            _local, target_dir, rows = op_list(holder["dir"])
+            print(f"备份夹: {target_dir}")
+            for row in rows:
+                print(f"  {row[0]}  {row[1]}  {row[3]}  {row[2]}文件  {row[5]}")
+        elif args.command == "restore":
+            result = op_restore(args.zip, holder["dir"])
+            status(f"已恢复: 写入 {len(result['written'])}, 一致 {len(result['identical'])}")
+        elif args.command == "export":
+            result = op_export(holder["dir"], args.out, args.title, args.note)
+            status(f"已导出 → {result['path']}")
+        elif args.command == "import":
+            result = op_import(args.share, holder["dir"])
+            status(f"导入完成: 写入 {len(result['written'])}, 一致 {len(result['identical'])}")
+        return
+    while True:
+        print(MENU_TEXT.format(ver=TOOL_VERSION))
+        print(f"配置目录: {holder['dir']}")
+        choice = input("请选择: ").strip()
+        try:
+            menu_once(choice, holder)
+        except SystemExit:
+            raise
+        except Exception as err:
+            print(f"× {err}")
+        pause()
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

@@ -1,0 +1,1 @@
+{"name": "apex-config-tool", "productName": "ApexConfigTool", "version": "1.0.0", "description": "Apex Legends 本地配置备份/恢复/分享工具 (图形界面版)", "main": "main.js", "private": true, "author": "YG", "scripts": {"start": "electron .", "test": "node test/backend.test.js", "package": "bash build.sh"}, "dependencies": {"adm-zip": "^0.6.1"}, "devDependencies": {"@electron/packager": "^18.3.6"}}

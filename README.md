@@ -66,18 +66,25 @@ docker compose down -v                 # 停止并清空数据卷
 
 ## Apex 配置工具（备份 / 恢复 / 分享）
 
-登录后进入「Apex 配置」面板，下载 `apex_cfg_tool.exe`(Windows,CI 自动打包,**免装 Python**)或 `apex_cfg_tool.py`(macOS/Linux,需 Python 3.8+,零第三方依赖)，集中管理 Apex Legends 本地配置——灵敏度、键位、画质等均**字节级备份**，不依赖解析格式：
+登录后进入「Apex 配置」面板。Windows 三件套下载(**页面直链 GitHub Releases**,所有版本与产物互通,`kind='apexcfg'`/`format=1`、备份 manifest、安全包、指纹去重一致):
+- **完整 exe 图形版(推荐)** `ApexConfigTool-win-x64.zip` —— 仅约 1.2MB(Neutralino + 系统自带 WebView2,免安装);无边框自绘标题栏,逐行列出灵敏度/键位/画质全部键值,内置 LetsLogin 分享广场(登录→浏览→一键应用)
+- **控制台版** `ApexCfgTool-win.zip` —— 双击 `Start.bat` 进 PowerShell 菜单(Windows 自带,零依赖零编译)
+- **Python 脚本版** `apex_cfg_tool.py` —— 单文件,Python 3.8+,菜单/命令行双模式
+本工具集中管理 Apex Legends 本地配置——灵敏度、键位、画质等均**字节级备份**,不依赖解析格式:
 
 ```powershell
-python apex_cfg_tool.py scan                           # 定位配置目录(Saved Games\Respawn\Apex\local)
-python apex_cfg_tool.py backup                         # 备份(指纹去重+自动轮转,默认保留 20 份)
-python apex_cfg_tool.py list                           # 查看备份列表
-python apex_cfg_tool.py restore apex-backup-XXXX.zip   # 恢复(恢复前自动为当前状态打安全包)
-python apex_cfg_tool.py export -o 我的配置.apexcfg       # 导出可分享配置(含灵敏度预览)
-python apex_cfg_tool.py import 队友配置.apexcfg          # 应用他人配置(同样先打安全包)
+# 双击 Start.bat 走菜单即可;以下为命令行等价写法(在解压目录执行)
+powershell -ExecutionPolicy Bypass -File apex_cfg_tool.ps1 -Action scan                               # 定位配置目录(Saved Games\Respawn\Apex\local)
+powershell -ExecutionPolicy Bypass -File apex_cfg_tool.ps1 -Action backup                             # 备份(指纹去重+自动轮转,默认保留 20 份)
+powershell -ExecutionPolicy Bypass -File apex_cfg_tool.ps1 -Action list                               # 查看备份列表
+powershell -ExecutionPolicy Bypass -File apex_cfg_tool.ps1 -Action restore -Path apex-backup-XXXX.zip # 恢复(恢复前自动为当前状态打安全包)
+powershell -ExecutionPolicy Bypass -File apex_cfg_tool.ps1 -Action export -Out 我的配置.apexcfg        # 导出可分享配置(含灵敏度预览)
+powershell -ExecutionPolicy Bypass -File apex_cfg_tool.ps1 -Action import -Path 队友配置.apexcfg       # 应用他人配置(同样先打安全包)
+powershell -ExecutionPolicy Bypass -File apex_cfg_tool.ps1 -Action show                               # 查看具体键位/画质/全部设置(可加 -Filter 关键字筛选)
 ```
 
 - 安全性：逐文件 sha256 校验、原子写入、包内文件名防路径穿越；服务端发布时会重新校验 base64/哈希
+- 兼容性：备份 zip 与 `.apexcfg`(format=1) 为统一格式,旧版工具产生的备份仍可恢复
 - 网页「分享广场」支持标题/备注/灵敏度摘要搜索与分页浏览；配置正文仅在点击下载时拉取（列表接口不传 payload）
 - 详细设计与性能方案见 [docs/apex-config-design.md](docs/apex-config-design.md)
 
@@ -121,5 +128,5 @@ python apex_cfg_tool.py import 队友配置.apexcfg          # 应用他人配�
 └── web/                      # 前端(nginx)
     └── public/
         ├── index.html / app.js / style.css
-        └── downloads/        # apex_cfg_tool.py 工具直链
+        └── downloads/        # GUI 控制台双版本直链 + ps1 + Start.bat + 图形版源码在 apex-config-gui/
 ```

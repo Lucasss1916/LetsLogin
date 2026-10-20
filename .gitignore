@@ -20,3 +20,10 @@ npm-debug.log*
 # Python 字节码缓存(桌面工具 apex_cfg_tool)
 __pycache__/
 *.pyc
+# 桌面工具构建产物(可用构建脚本再生)
+apex-config-lite/bin/
+apex-config-lite/dist/
+apex-config-lite/node_modules/
+apex-config-gui/release/
+apex-config-gui/node_modules/
+apex-config-gui/.pack-tmp/

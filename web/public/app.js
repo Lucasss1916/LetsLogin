@@ -844,7 +844,7 @@ function renderCfgList() {
         <button type="button" class="primary sm" data-cfg-dl="${c.id}">⇩ 下载 .apexcfg</button>
         <button type="button" class="ghost sm" data-cfg-toggle="${c.id}">明细</button>
       </div>
-      <pre class="cfg-detail hidden" id="cfg-detail-${c.id}">${esc(JSON.stringify(c.preview || {}, null, 2))}</pre>
+      <div class="cfg-detail hidden" id="cfg-detail-${c.id}"><span class="cfg-detail-hint">点击「明细」查看具体键位 / 画质 / 全部设置</span></div>
     </article>`).join('')
 }
 
@@ -878,7 +878,7 @@ async function downloadCfg(id) {
     a.download = cfgSanitizeFilename(config.title) + '.apexcfg'
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 2000)
-    toast(`已下载 ${a.download},用工具 import 即可应用`)
+    toast(`已下载 ${a.download},在图形版「分享配置」页或控制台菜单「5 导入分享文件」应用`)
   } catch (err) { toast(err.message, false) }
 }
 
@@ -918,8 +918,79 @@ $('cfg-list').addEventListener('click', (e) => {
   const del = e.target.closest('[data-cfg-del]')
   if (del) return deleteCfg(Number(del.dataset.cfgDel), del)
   const toggle = e.target.closest('[data-cfg-toggle]')
-  if (toggle) $(`cfg-detail-${toggle.dataset.cfgToggle}`).classList.toggle('hidden')
+  if (toggle) return cfgToggleDetail(Number(toggle.dataset.cfgToggle))
 })
+
+// 明细缓存:id → 渲染好的 HTML(点击后首次解码, 不重复请求)
+const cfgDetailCache = {}
+
+function cfgParsePairsText(text) {
+  const rows = []
+  const qMap = new Map()
+  const reQuoted = /"([^"\r\n]+)"\s+"([^"\r\n]*)"/g
+  let m
+  while ((m = reQuoted.exec(text))) qMap.set(m[1].trim(), m[2].trim())
+  for (const [k, v] of qMap) rows.push([k, v])
+  for (const line of text.split(/\r?\n/)) {
+    const bm = line.match(/^\s*([A-Za-z0-9_.-]+)\s+(-?[A-Za-z0-9_.]+)\s*$/)
+    if (bm && !qMap.has(bm[1].trim())) rows.push([bm[1].trim(), bm[2].trim()])
+  }
+  return rows
+}
+
+// 从 .apexcfg 正文解码出每个文件的键值行(与工具端 Get-FilePairs 同规则)
+function cfgDecodePayloadFiles(payloadText) {
+  const share = JSON.parse(payloadText)
+  const files = []
+  for (const [name, meta] of Object.entries(share.files || {})) {
+    const bytes = Uint8Array.from(atob(meta.b64), ch => ch.charCodeAt(0))
+    const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+    files.push({ name, rows: cfgParsePairsText(text) })
+  }
+  return files
+}
+
+const CFG_DETAIL_ROW_CAP = 400
+
+function cfgBuildDetailHtml(payloadText) {
+  let files
+  try { files = cfgDecodePayloadFiles(payloadText) }
+  catch { return '<div class="cfg-kv-title">配置内容无法解析(损坏或不完整)</div>' }
+  return files.map(({ name, rows }) => {
+    const isVideo = /videoconfig/i.test(name)
+    const groups = isVideo
+      ? [['画质 / 视频设置', rows]]
+      : [
+          ['键位 / 绑定 (bind)', rows.filter(r => /bind/i.test(r[0]))],
+          ['灵敏度 (sens)', rows.filter(r => /sens/i.test(r[0]) && !/bind/i.test(r[0]))],
+          ['其他设置', rows.filter(r => !/bind/i.test(r[0]) && !/sens/i.test(r[0]))],
+        ]
+    const html = groups.filter(g => g[1].length > 0).map(([title, groupRows]) => {
+      const body = groupRows.slice(0, CFG_DETAIL_ROW_CAP).map(r =>
+        `<div class="kv-row"><span class="kv-k">${esc(r[0])}</span><span class="kv-v">${esc(r[1])}</span></div>`
+      ).join('')
+      const more = groupRows.length > CFG_DETAIL_ROW_CAP
+        ? `<div class="cfg-kv-title">…其余 ${groupRows.length - CFG_DETAIL_ROW_CAP} 行省略</div>`
+        : ''
+      return `<div class="cfg-kv-group"><div class="cfg-kv-title">${esc(title)} · ${groupRows.length} 项</div>${body}${more}</div>`
+    }).join('')
+    return `<div class="cfg-file"><h4>${esc(name)}</h4>${html || '<div class="cfg-kv-title">(空)</div>'}</div>`
+  }).join('')
+}
+
+async function cfgToggleDetail(id) {
+  const el = $('cfg-detail-' + id)
+  if (!el.classList.contains('hidden')) { el.classList.add('hidden'); return }
+  el.classList.remove('hidden')
+  if (cfgDetailCache[id]) { el.innerHTML = cfgDetailCache[id]; return }
+  el.textContent = '解码中…'
+  try {
+    // 详情接口才携带 payload 正文;不带 count=1, 不会虚增下载次数
+    const { config } = await api('GET', '/apex/configs/' + id)
+    cfgDetailCache[id] = cfgBuildDetailHtml(config.payload)
+    el.innerHTML = cfgDetailCache[id]
+  } catch (err) { el.textContent = '加载失败: ' + err.message }
+}
 
 $('cfg-more').addEventListener('click', () => loadCfgConfigs())
 

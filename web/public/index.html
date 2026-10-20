@@ -153,20 +153,21 @@
       <div class="panel-head">
         <h2>Apex 配置工具</h2>
         <span class="cfg-dl-group">
-          <a class="primary cfg-dl-anchor" href="/downloads/apex_cfg_tool.exe" download>⇩ Windows exe(免装 Python)</a>
-          <a class="ghost cfg-dl-anchor" href="/downloads/apex_cfg_tool.py" download>⇩ .py 源脚本</a>
-        </span>
+            <a class="primary cfg-dl-anchor" href="https://github.com/Lucasss1916/LetsLogin/releases/latest/download/ApexConfigTool-win-x64.zip" download>⇩ 完整 exe 图形版 (轻量 WebView2, 推荐)</a>
+            <a class="cfg-dl-anchor" href="https://github.com/Lucasss1916/LetsLogin/releases/latest/download/ApexCfgTool-win.zip" download>⇩ 控制台版 (bat → PowerShell)</a>
+            <a class="ghost cfg-dl-anchor" href="https://github.com/Lucasss1916/LetsLogin/releases/latest/download/apex_cfg_tool.py" download>⇩ Python 脚本 (单文件)</a>
+          </span>
       </div>
 
       <div class="cfg-grid">
         <div class="card cfg-usage">
           <h3>备份 / 恢复(本机)</h3>
           <ol class="cfg-steps">
-            <li>Windows 用户下载 exe(零依赖,下载即用);macOS / Linux 下载 .py(需 Python 3.8+,零第三方依赖)</li>
-            <li>打开 PowerShell / 终端,进入文件所在目录</li>
-            <li>备份当前配置:<code>.\apex_cfg_tool.exe backup</code>(.py 版为 <code>python apex_cfg_tool.py backup</code>)</li>
-            <li>查看备份列表:<code>.\apex_cfg_tool.exe list</code></li>
-            <li>恢复备份:<code>.\apex_cfg_tool.exe restore apex-backup-XXXX.zip</code></li>
+            <li>下载并解压 <code>ApexConfigTool-win-x64.zip</code>,运行其中的 <code>ApexConfigTool-win_x64.exe</code>(图形界面,仅 ~2MB,Win10/11 自带 WebView2)</li>
+            <li>本地配置页可<b>筛选浏览全部键值</b>(灵敏度/键位/画质逐行列出),一键「立即备份」;内置「分享广场」可登录后发布/一键应用他人配置</li>
+            <li>备份页选中历史备份可回滚;恢复/导入前自动生成安全包,可随时再恢复</li>
+            <li>分享页把配置导出为 <code>.apexcfg</code> 发布;导入他人的配置同理</li>
+            <li>没有图形环境? 三个补充任选: <code>ApexCfgTool-win.zip</code>(双击 <code>Start.bat</code> 进菜单)或单文件 <code>apex_cfg_tool.py</code>(需 Python 3.8+)</li>
           </ol>
           <p class="muted">工具只读写 <code>Saved Games\Respawn\Apex\local</code> 下的 <code>*.cfg / *.txt</code> 配置文件(灵敏度、键位、画质);每次恢复前会自动给当前状态打安全包,可随时再恢复回去。</p>
         </div>
@@ -187,7 +188,7 @@
             <div id="cfg-publish-error" class="error hidden"></div>
             <button class="primary" type="submit">发布到分享广场</button>
           </form>
-          <p class="muted">先在本地运行 <code>python apex_cfg_tool.py export -o 我的配置.apexcfg</code> 导出分享文件,再在这里上传。别人下载后用 <code>import</code> 命令一键应用。</p>
+          <p class="muted">先在工具菜单「4 导出分享文件」生成 <code>.apexcfg</code>,再在这里上传。别人下载后在工具菜单「5 导入分享文件」一键应用。</p>
         </div>
       </div>
 

@@ -1450,7 +1450,7 @@ button[disabled] {
 
 .cfg-detail {
   margin: 0;
-  max-height: 260px;
+  max-height: 360px;
   overflow: auto;
   font-size: 11px;
   color: #9fb2d6;
@@ -1458,6 +1458,41 @@ button[disabled] {
   border: 1px solid rgba(0, 240, 255, 0.18);
   padding: 10px;
 }
+
+.cfg-detail-hint { font-family: var(--font-mono); color: var(--muted); }
+
+.cfg-file h4 {
+  margin: 10px 0 4px;
+  color: var(--cyan);
+  font-size: 12.5px;
+  letter-spacing: 1px;
+}
+
+.cfg-kv-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  margin: 10px 0 4px;
+}
+
+.kv-row {
+  display: flex;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 2px 0;
+  border-bottom: 1px dashed rgba(0, 240, 255, 0.08);
+}
+
+.kv-k {
+  width: 42%;
+  min-width: 160px;
+  flex-shrink: 0;
+  color: #9fd8ff;
+  word-break: break-all;
+}
+
+.kv-v { color: #e8eefc; word-break: break-all; }
 
 .cfg-more-row {
   display: flex;

@@ -6,8 +6,9 @@
 
 ```
 ┌─────────────────────┐        下载           ┌──────────────────────────┐
-│  apex_cfg_tool.py   │◀──── /downloads/ ─────│  nginx(静态资源)          │
-│  (桌面 CLI, Python)  │                       │  gzip + Cache-Control    │
+│  ApexConfigTool /    │◀──── /downloads/ ─────│  nginx(静态资源)          │
+│  apex_cfg_tool.ps1   │                       │  gzip + Cache-Control    │
+│  (GUI + CLI 双版本)   │                       │                          │
 └─────────┬───────────┘                       └────────────▲─────────────┘
           │ 读写                                            │ 浏览器
           ▼                                                │
@@ -19,7 +20,7 @@
                                                         PostgreSQL(apex_configs 表)
 ```
 
-- **桌面端（CLI）**：单文件 `apex_cfg_tool.py`，仅 Python 标准库，负责本地备份/恢复/导出/导入。逆向兼容：对配置文件做字节级快照，不解析语义即可完整还原。
+- **桌面端（Windows，三版本）**：图形版 `ApexConfigTool-win-x64.zip`（**Neutralino 轻量版 ~1.2MB**，系统自带 WebView2 渲染同一套全键值界面 + 筛选 + 分享广场 + 自绘无边框标题栏）；控制台版 `apex_cfg_tool.ps1`（PS 5.1+ 零依赖零编译，`Start.bat` 免安装菜单）；Python 版 `apex_cfg_tool.py`（单文件，3.8+，菜单/命令行双模式）。三版**引擎互通**：同一 `.apexcfg`(kind/format)、同一备份 manifest、同一安全包/指纹去重规则，逆向兼容：对配置文件做字节级快照，不解析语义即可完整还原。
 - **网页端**：登录后的 `Apex 配置` 面板，供给侧览/搜索/发布/下载 `.apexcfg`。
 - **服务端**：复用现有 JWT 鉴权，分享广场写入 `apex_configs` 表；列表接口不返回配置正文。
 
@@ -63,25 +64,38 @@ apex-backup-YYYYMMDD-HHMMSS.zip
 ```
 
 - 文件正文 base64 + sha256 双保险：跨平台编码无所谓，传输后逐文件校验哈希。
-- `preview` 供网页卡片直接渲染，**网页与数据库永不接触文件正文以外的大结构**（见性能设计）。
+- `preview` 供网页卡片直接渲染，**列表接口只带这份摘要**；`preview.file_pairs` 额外携带每文件全部键值行（单文件上限 800 行、键 80 字符、值 120 字符）。
+- 网页卡片「明细」在点击时调用详情接口解码 payload 正文，按 键位(bind) / 灵敏度(sens) / 其他设置 / 画质(videoconfig) 分组全量展示——不增加列表流量，也不改数据库结构。
 
 ## 4. 功能设计
 
-### 4.1 CLI
+### 4.1 桌面工具（Windows）
 
-| 命令 | 说明 |
+**图形版（推荐）**：解压 `ApexConfigTool-win-x64.zip` → 运行 `ApexConfigTool.exe`。三个页签：
+- **本地配置**：每个文件的全部键值逐行展示（文件/分组/键/值），分组为 键位(bind)/灵敏度(sens)/画质(videoconfig)/其他，关键字实时筛选；
+- **备份与恢复**：一键备份（指纹去重 + 轮转）+ 列表选中恢复（自动安全包）；
+- **分享广场**：导出 `.apexcfg`（另存为对话框）、导入应用（自动安全包 + 校验）。
+- **分享广场（接入 LetsLogin 服务端）**：登录（JWT）后可浏览/搜索广场、查看配置全量键值明细、一键导入（`?count=1` 计下载）、保存 .apexcfg、发布当前配置、删除自己的分享；HTTP 均在主进程发起（无 CORS），导入走与本地相同的校验/安全包管线。
+- **自绘标题栏**：`frame:false` 隐藏系统最小化/最大化/关闭按钮，改为自绘控件（`-webkit-app-region: drag` 拖拽区 + `thickFrame` 保留缩放边缘）。
+Node 主进程（`apex-config-gui/backend.js`）与 PowerShell 版行为逐条对齐，可用 `node test/backend.test.js` 独立回归。
+
+**控制台版**：双击 `Start.bat` 进入菜单；命令行 `-Action` 参数与菜单等价，便于脚本化：
+
+| 菜单 / -Action | 说明 |
 |---|---|
-| `scan` | 定位候选配置目录，列出目录与文件 |
-| `show` | 预览当前灵敏度/分辨率/键位条数 |
-| `backup` | 快照打包 + 指纹去重 + 自动轮转（默认保留 20 份） |
-| `list` | 列出本地备份（时间/文件数/大小/指纹） |
-| `restore ZIP` | 恢复（自动安全包 → 逐文件校验写入 → 复检哈希） |
-| `export` | 导出 `.apexcfg` 分享文件 |
-| `import FILE` | 应用分享配置（先安全包 → 校验 → 原子写入） |
+| `[1] backup` | 快照打包 + 指纹去重 + 自动轮转（默认保留 20 份） |
+| `[2] list` | 列出本地备份（时间/文件数/大小/指纹） |
+| `[3] restore ZIP` | 恢复（自动安全包 → 逐文件校验写入 → 复检哈希） |
+| `[4] export` | 导出 `.apexcfg` 分享文件 |
+| `[5] import FILE` | 应用分享配置（先安全包 → 校验 → 原子写入） |
+| `[6] show` | 预览当前灵敏度/分辨率/键位条数 |
+| `[7] scan` | 定位候选配置目录，列出文件 |
+
+实现注意：脚本保存为 UTF-8 **带 BOM**（Windows PowerShell 5.1 无 BOM 会把中文按 ANSI 解析成乱码）；仅使用 PS5.1 可用语法（`-in`、`[ordered]`、`::new()`，不用 `??`/三元等 PS7 才有的特性），zip 操作走 `System.IO.Compression`。此前 PyInstaller 编译 exe 的链路（CI 构建 `apex_cfg_tool.exe`）已下线，不再需要任何编译步骤。
 
 ### 4.2 网页「Apex 配置」面板
 
-1. **下载区**：一键下载 `apex_cfg_tool.py` + 命令速查。
+1. **下载区**：图形版 `ApexConfigTool-win-x64.zip`（主按钮）+ 控制台版 `ApexCfgTool-win.zip`（含 Start.bat / apex_cfg_tool.ps1 / 使用说明）+ 单文件 .ps1 直链。
 2. **分享广场**：卡片列表（标题/作者/灵敏度摘要/文件数/时间/下载数），关键词搜索、分页加载更多。
 3. **发布**：选择 `.apexcfg` 文件 → 前端校验 → 填标题备注 → 发布。
 4. **下载卡片**：拉取详情接口获得 payload → 浏览器端生成 Blob 下载 → 同工具 `import` 应用。
@@ -134,9 +148,14 @@ apex-backup-YYYYMMDD-HHMMSS.zip
 ## 7. 目录与改动清单
 
 ```
-web/public/downloads/apex_cfg_tool.py   # 新增: CLI 工具(下载页直链)
+apex-config-gui/                        # 新增: 图形版源码(main/backend/preload/renderer/test)
+web/public/downloads/apex_cfg_tool.ps1  # 控制台工具(菜单+参数, 零依赖)
+web/public/downloads/Start.bat          # 菜单启动器(绕过执行策略)
+web/public/downloads/使用说明.txt        # 面向使用者的说明
+web/public/downloads/ApexCfgTool-win.zip # 控制台版打包直链
+web/public/downloads/ApexConfigTool-win-x64.zip # 图形版(Neutralino 轻量, win x64)直链
 web/public/index.html                   # +Apex 配置面板
-web/public/app.js                       # +分享广场逻辑(懒加载/分页/防抖/发布)
+web/public/app.js                       # +分享广场逻辑(懒加载/分页/防抖/发布/明细解码)
 web/public/style.css                    # +面板样式
 web/nginx.conf                          # +/downloads 下载头 + gzip
 server/src/db.js                        # +apex_configs 表与索引
@@ -150,4 +169,4 @@ docs/apex-config-design.md              # 本文档
 - **公共广场**：开放只读匿名浏览 + 队列审核；列表改游标分页（`created_at+id` keyset），`ILIKE` 换 `tsvector` 全文索引。
 - **热度**：下载计数已有，可加收藏/点赞表 + `hot_score` 定时聚合。
 - **一键应用**：工具增加 `import-from-url`，网页复制带 token 的命令直达。
-- **Windows 包装**：PyInstaller 打包单 exe，网页出直链，免 Python 环境。
+- **桌面端**：轻量图形版已落地（`apex-config-lite/`，Neutralino v6：`neu build` 产出 `ApexConfigTool-win_x64.exe`(2.4MB)+`resources.neu`，直链同仓库 Releases；Electron 版 `apex-config-gui/` 源码保留、不再随包发布——158MB 包体被 WebView2 方案替代）。曾评估 WPF（系统自带但观感陈旧）与 WinUI3（需 .NET SDK + Windows App SDK 打包，违背免安装）与 Electron（功能完整但 158MB 过大）。轻量版引擎为纯 JS（`resources/src/engine.js`，存储/哈希/zip 由适配器注入：浏览器=Neutralino fs+WebCrypto+fflate，Node 自测=fs/promises+crypto+fflate），11 项行为测试与 Python 版 10 项、PS1 版全绿。后续可为 exe 代码签名以消除 SmartScreen 提示。

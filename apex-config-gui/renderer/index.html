@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+  <title>Apex 配置工具</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="titlebar">
+    <div class="tb-brand"><span class="logo-dot"></span>Apex 配置工具</div>
+    <div class="tb-drag"></div>
+    <div class="tb-controls">
+      <button id="btn-wmin" class="tb-btn" title="最小化">&#x2500;</button>
+      <button id="btn-wmax" class="tb-btn" title="最大化 / 还原">&#x25a1;</button>
+      <button id="btn-wclose" class="tb-btn tb-close" title="关闭">&#x2715;</button>
+    </div>
+  </header>
+
+  <div id="app">
+    <aside id="side">
+      <nav id="nav">
+        <button class="nav-item active" data-tab="config"><span class="nav-glyph">▤</span>本地配置</button>
+        <button class="nav-item" data-tab="backups"><span class="nav-glyph">✦</span>备份与恢复</button>
+        <button class="nav-item" data-tab="share"><span class="nav-glyph">⇅</span>导出 / 导入</button>
+        <button class="nav-item" data-tab="plaza"><span class="nav-glyph">☁</span>分享广场</button>
+      </nav>
+      <div class="side-foot" id="side-version">v1.1.0</div>
+    </aside>
+
+    <div id="main">
+      <header id="dirbar">
+        <label for="dir-input">配置目录</label>
+        <input id="dir-input" type="text" spellcheck="false" placeholder="自动检测 Saved Games\Respawn\Apex\local">
+        <button id="btn-detect" class="btn">重新检测</button>
+        <button id="btn-reload" class="btn">刷新</button>
+        <button id="btn-open-dir" class="btn ghost">打开目录</button>
+      </header>
+
+      <section id="tab-config" class="tab active">
+        <div class="toolbar">
+          <input id="cfg-filter" type="text" spellcheck="false" placeholder="筛选键名或值, 如 sens / bind / fps / 分辨率…">
+          <div id="cfg-chips" class="chips"></div>
+          <span id="cfg-count" class="count"></span>
+        </div>
+        <div class="table-wrap" id="cfg-table-wrap"></div>
+      </section>
+
+      <section id="tab-backups" class="tab">
+        <div class="toolbar">
+          <button id="btn-backup" class="btn primary">① 备份当前配置</button>
+          <button id="btn-restore" class="btn">② 恢复选中的备份</button>
+          <button id="btn-open-backups" class="btn ghost">打开备份夹</button>
+          <span class="spacer"></span>
+          <label class="inline-label" for="keep-input">保留份数</label>
+          <input id="keep-input" class="num" type="number" min="1" max="200" value="20">
+        </div>
+        <div class="table-wrap" id="bk-table-wrap"></div>
+      </section>
+
+      <section id="tab-share" class="tab">
+        <div class="share-grid">
+          <div class="card">
+            <h3 class="card-title cyan">导出我的配置</h3>
+            <div class="form-row"><label for="share-label">标题</label><input id="share-label" type="text" placeholder="例如: 1.8 灵敏度 + 240fps"></div>
+            <div class="form-row"><label for="share-note">备注</label><input id="share-note" type="text" placeholder="想补充说明的话(可空)"></div>
+            <div class="form-actions"><button id="btn-export" class="btn primary">⤓ 导出到 .apexcfg 文件 (弹出另存为)</button></div>
+            <div id="export-result" class="hint-box"></div>
+          </div>
+          <div class="card">
+            <h3 class="card-title cyan">导入他人的配置</h3>
+            <div class="form-actions">
+              <button id="btn-pick-share" class="btn">⑴ 选择 .apexcfg 文件</button>
+              <button id="btn-import" class="btn primary" disabled>⑵ 应用该配置</button>
+            </div>
+            <div id="share-info" class="hint-box">选择一个 .apexcfg 文件查看内容摘要, 应用前会自动为当前配置生成安全包。</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-plaza" class="tab">
+        <div class="plaza-login card">
+          <h3 class="card-title cyan"> LetsLogin 账号</h3>
+          <div class="form-row plaza-form">
+            <input id="pz-base" type="text" placeholder="服务器地址, 如 http://127.0.0.1:3080">
+            <input id="pz-user" type="text" placeholder="用户名">
+            <input id="pz-pass" type="password" placeholder="密码">
+            <button id="btn-pz-login" class="btn primary">登 录</button>
+            <button id="btn-pz-logout" class="btn ghost hidden">退 出</button>
+          </div>
+        </div>
+
+        <div id="pz-main" class="hidden">
+          <div class="toolbar">
+            <input id="pz-search" type="text" spellcheck="false" placeholder="搜索标题 / 备注 / 灵敏度…">
+            <button id="btn-pz-refresh" class="btn">刷新</button>
+            <span id="pz-count" class="count"></span>
+            <span class="spacer"></span>
+            <button id="btn-pz-publish" class="btn primary">⊕ 发布我的当前配置</button>
+          </div>
+          <div class="table-wrap" id="pz-list"></div>
+          <div class="toolbar plaza-footer">
+            <button id="btn-pz-more" class="btn ghost hidden">加载更多</button>
+          </div>
+        </div>
+        <div id="pz-locked" class="empty-tab hidden">登录 LetsLogin 账号后即可浏览 / 发布 / 一键应用队友的配置。</div>
+      </section>
+
+      <footer id="statusbar"><span id="status-text">就绪</span></footer>
+    </div>
+  </div>
+
+  <div id="modal-mask" class="hidden">
+    <div class="modal">
+      <h4 id="modal-title">确认</h4>
+      <p id="modal-text"></p>
+      <div class="modal-actions">
+        <button id="modal-cancel" class="btn ghost">取消</button>
+        <button id="modal-ok" class="btn primary">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="detail-overlay" class="hidden">
+    <div id="detail-panel">
+      <div class="detail-head">
+        <div>
+          <h4 id="detail-title">—</h4>
+          <div id="detail-meta" class="detail-meta"></div>
+        </div>
+        <div class="detail-actions">
+          <button id="btn-detail-import" class="btn primary">⤒ 导入此配置</button>
+          <button id="btn-detail-download" class="btn">⤓ 下载 .apexcfg</button>
+          <button id="btn-detail-close" class="btn ghost">关 闭</button>
+        </div>
+      </div>
+      <div id="detail-hint" class="hint-box">备注: —</div>
+      <div class="table-wrap" id="detail-rows"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>
