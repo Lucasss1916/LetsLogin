@@ -73,6 +73,13 @@ const showRegisterView = () => { show('register-form'); hide('login-form'); hide
 $('goto-register').addEventListener('click', (e) => { e.preventDefault(); showRegisterView() })
 $('goto-login').addEventListener('click', (e) => { e.preventDefault(); showLoginView() })
 
+// 邀请码输入自动格式化为大写 4-4-4(过滤非法字符;码表剔除 I L O 0 1)
+$('reg-invite').addEventListener('input', (e) => {
+  const raw = e.target.value.toUpperCase().replace(/[^A-HJKMN-Z2-9]/gi, '').slice(0, 12)
+  e.target.value = raw.length > 8 ? `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8)}`
+    : raw.length > 4 ? `${raw.slice(0, 4)}-${raw.slice(4)}` : raw
+})
+
 $('register-form').addEventListener('submit', async (e) => {
   e.preventDefault(); hide('register-error')
   const pw = $('reg-password').value, pw2 = $('reg-password2').value
@@ -919,6 +926,15 @@ $('cfg-list').addEventListener('click', (e) => {
   if (del) return deleteCfg(Number(del.dataset.cfgDel), del)
   const toggle = e.target.closest('[data-cfg-toggle]')
   if (toggle) return cfgToggleDetail(Number(toggle.dataset.cfgToggle))
+  // 展开明细里的「查看原文」
+  const rt = e.target.closest('[data-cfg-raw]')
+  if (rt) {
+    const pre = $('cfg-raw-' + rt.dataset.cfgRaw)
+    if (pre) {
+      pre.classList.toggle('hidden')
+      rt.textContent = pre.classList.contains('hidden') ? '查看原文' : '收起原文'
+    }
+  }
 })
 
 // 明细缓存:id → 渲染好的 HTML(点击后首次解码, 不重复请求)
@@ -926,15 +942,29 @@ const cfgDetailCache = {}
 
 function cfgParsePairsText(text) {
   const rows = []
-  const qMap = new Map()
+  const qMap = new Map()        // 非 bind 的 "a" "b" 引号对
+  const bindRows = []
+  const bindKeys = new Set()    // bind 行吸收的键,避免引号对兜底重复收录
   const reQuoted = /"([^"\r\n]+)"\s+"([^"\r\n]*)"/g
   let m
-  while ((m = reQuoted.exec(text))) qMap.set(m[1].trim(), m[2].trim())
-  for (const [k, v] of qMap) rows.push([k, v])
   for (const line of text.split(/\r?\n/)) {
+    // bind 行(如 bind "w" "+forward"):单独标记为 bind,供分组与中文对照
+    const bindline = line.match(/^\s*bind\s+"([^"]+)"\s+"([^"]*)"/i)
+    if (bindline) {
+      const k = bindline[1].trim(), v = bindline[2].trim()
+      bindKeys.add(k)
+      bindRows.push([k, v, 'bind'])
+      continue
+    }
     const bm = line.match(/^\s*([A-Za-z0-9_.-]+)\s+(-?[A-Za-z0-9_.]+)\s*$/)
-    if (bm && !qMap.has(bm[1].trim())) rows.push([bm[1].trim(), bm[2].trim()])
+    if (bm) qMap.set(bm[1].trim(), bm[2].trim())
   }
+  while ((m = reQuoted.exec(text))) {
+    const k = m[1].trim(), v = m[2].trim()
+    if (!bindKeys.has(k)) qMap.set(k, v)
+  }
+  for (const [k, v] of qMap) rows.push([k, v])
+  rows.push(...bindRows)
   return rows
 }
 
@@ -945,9 +975,57 @@ function cfgDecodePayloadFiles(payloadText) {
   for (const [name, meta] of Object.entries(share.files || {})) {
     const bytes = Uint8Array.from(atob(meta.b64), ch => ch.charCodeAt(0))
     const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
-    files.push({ name, rows: cfgParsePairsText(text) })
+    files.push({ name, rows: cfgParsePairsText(text), raw: text })
   }
   return files
+}
+
+// ---------- 键位中英对照表 ----------
+function cfgKeyZh(key) {
+  const k = String(key).toUpperCase()
+  if (/^[A-Z]$/.test(k)) return k + ' 键'
+  if (/^([1-9]|0)$/.test(k)) return '数字键 ' + k
+  if (/^F(?:[1-9]|1[0-2])$/.test(k)) return '功能键 ' + k
+  const named = {
+    SPACE: '空格', TAB: 'Tab 键', CAPSLOCK: '大写锁定', SHIFT: 'Shift', CTRL: 'Ctrl', ALT: 'Alt',
+    LSHIFT: '左 Shift', RSHIFT: '右 Shift', LCTRL: '左 Ctrl', RCTRL: '右 Ctrl', LALT: '左 Alt', RALT: '右 Alt',
+    INS: '插入 Ins', DEL: '删除 Del', HOME: 'Home', END: 'End',
+    PGUP: '翻页上 PgUp', PGDN: '翻页下 PgDn', PAUSE: '暂停键',
+    LEFTARROW: '方向 ←', RIGHTARROW: '方向 →', UPARROW: '方向 ↑', DOWNARROW: '方向 ↓',
+  }
+  if (named[k]) return named[k]
+  if (k.startsWith('MOUSE')) {
+    const n = k.slice(5)
+    if (n === '1') return '鼠标左键'
+    if (n === '2') return '鼠标右键'
+    if (n === '3') return '鼠标中键'
+    return '鼠标侧键 ' + n
+  }
+  if (k === 'WHEELUP' || k === 'MWHEELUP') return '滚轮上'
+  if (k === 'WHEELDOWN' || k === 'MWHEELDOWN') return '滚轮下'
+  if (k.startsWith('KP_')) {
+    const sub = { INS: '0', END: '1', DOWNARROW: '2', PGDN: '3', LEFTARROW: '4', '5': '5', RIGHTARROW: '6', HOME: '7', UPARROW: '8', PGUP: '9', DEL: '.', SLASH: '/', MULTIPLY: '*', MINUS: '-', PLUS: '+', ENTER: 'Enter' }
+    const s = sub[k.slice(3)]
+    if (s) return '小键盘 ' + s
+  }
+  return ''
+}
+
+const CFG_BIND_ZH = {
+  '+forward': '前进', '+back': '后退', '+moveleft': '左平移', '+moveright': '右平移',
+  '+jump': '跳跃', '+duck': '蹲下', '+speed': '静步走', '+sprint': '冲刺',
+  '+attack': '主攻击(开火)', '+attack2': '次要攻击', '+zoom': '瞄准(ADS)', '+reload': '装填弹药',
+  '+melee': '近战攻击', '+use': '交互(拾取/开门/扶人)',
+  '+tactical': '战术技能', '+ultimate': '终极技能', '+ping': '标点 / 快速标记',
+  '+invnext': '切换下一把武器', '+invprev': '切换上一把武器',
+  '+slot1': '切到 1 号武器', '+slot2': '切到 2 号武器', '+slot3': '切到 3 号武器',
+  '+invnextnpg': '切换下一把武器(小键盘兼容)', '+inspect': '检视武器',
+  '+scores': '计分板', '+map': '打开地图', '+toggle_duck': '蹲下(切换式)',
+}
+
+function cfgBindZh(cmd) {
+  const t = String(cmd).trim().replace(/^"|"$/g, '').split(/\s+/)[0]
+  return CFG_BIND_ZH[t.toLowerCase()] || CFG_BIND_ZH[t] || ''
 }
 
 const CFG_DETAIL_ROW_CAP = 400
@@ -956,25 +1034,33 @@ function cfgBuildDetailHtml(payloadText) {
   let files
   try { files = cfgDecodePayloadFiles(payloadText) }
   catch { return '<div class="cfg-kv-title">配置内容无法解析(损坏或不完整)</div>' }
-  return files.map(({ name, rows }) => {
+  return files.map(({ name, rows, raw }, fIdx) => {
     const isVideo = /videoconfig/i.test(name)
+    const binds = rows.filter(r => r[2] === 'bind')
     const groups = isVideo
       ? [['画质 / 视频设置', rows]]
       : [
-          ['键位 / 绑定 (bind)', rows.filter(r => /bind/i.test(r[0]))],
-          ['灵敏度 (sens)', rows.filter(r => /sens/i.test(r[0]) && !/bind/i.test(r[0]))],
-          ['其他设置', rows.filter(r => !/bind/i.test(r[0]) && !/sens/i.test(r[0]))],
+          ['键位对照(原文 + 中文)', binds],
+          ['灵敏度 (sensitivity)', rows.filter(r => r[2] !== 'bind' && /sens/i.test(r[0]))],
+          ['其他设置', rows.filter(r => r[2] !== 'bind' && !/sens/i.test(r[0]))],
         ]
     const html = groups.filter(g => g[1].length > 0).map(([title, groupRows]) => {
-      const body = groupRows.slice(0, CFG_DETAIL_ROW_CAP).map(r =>
-        `<div class="kv-row"><span class="kv-k">${esc(r[0])}</span><span class="kv-v">${esc(r[1])}</span></div>`
-      ).join('')
+      const isBinds = title.startsWith('键位')
+      const body = groupRows.slice(0, CFG_DETAIL_ROW_CAP).map(r => {
+        if (isBinds) {
+          const keyZh = cfgKeyZh(r[0])
+          const cmdZh = cfgBindZh(r[1])
+          return `<div class="kv-row3"><span class="kv-key">${esc(r[0])}${keyZh ? `<em>${esc(keyZh)}</em>` : ''}</span><span class="kv-cmd">${esc(r[1])}</span><span class="kv-zh">${cmdZh ? esc(cmdZh) : '<i>自定义指令</i>'}</span></div>`
+        }
+        return `<div class="kv-row"><span class="kv-k">${esc(r[0])}</span><span class="kv-v">${esc(r[1])}</span></div>`
+      }).join('')
       const more = groupRows.length > CFG_DETAIL_ROW_CAP
         ? `<div class="cfg-kv-title">…其余 ${groupRows.length - CFG_DETAIL_ROW_CAP} 行省略</div>`
         : ''
-      return `<div class="cfg-kv-group"><div class="cfg-kv-title">${esc(title)} · ${groupRows.length} 项</div>${body}${more}</div>`
+      return `<div class="cfg-kv-group"><div class="cfg-kv-title">${esc(title)} · ${groupRows.length} 项${isBinds ? '(先英文原文,后中文对照)' : ''}</div>${body}${more}</div>`
     }).join('')
-    return `<div class="cfg-file"><h4>${esc(name)}</h4>${html || '<div class="cfg-kv-title">(空)</div>'}</div>`
+    return `<div class="cfg-file"><h4>${esc(name)} <button type="button" class="ghost sm" data-cfg-raw="${fIdx}">查看原文</button></h4>` +
+      `<pre class="cfg-raw hidden" id="cfg-raw-${fIdx}">${esc(raw)}</pre>${html || '<div class="cfg-kv-title">(空)</div>'}</div>`
   }).join('')
 }
 

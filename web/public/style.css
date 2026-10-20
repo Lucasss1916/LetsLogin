@@ -1701,3 +1701,141 @@ button[disabled] {
 .ghost.sm.danger:hover {
   box-shadow: 0 0 8px rgba(255, 0, 85, 0.35);
 }
+
+/* ==========================================================================
+   注册卡赛博强化 / 键位对照三联行 / 配置原文查看
+   ========================================================================== */
+.register-card {
+  border-color: rgba(0, 240, 255, 0.4);
+  box-shadow: 0 0 50px rgba(0, 240, 255, 0.10), inset 0 0 60px rgba(0, 240, 255, 0.03);
+  position: relative;
+  overflow: hidden;
+}
+
+.register-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--cyan) 30%, var(--cyan) 70%, transparent);
+  opacity: 0.85;
+}
+
+.register-card::after {
+  content: 'REG★★NEW☆ID';
+  position: absolute;
+  right: 14px;
+  top: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: rgba(0, 240, 255, 0.35);
+}
+
+.label-en {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: rgba(0, 240, 255, 0.55);
+  margin-left: 6px;
+  text-transform: uppercase;
+}
+
+.invite-input {
+  font-family: var(--font-mono);
+  font-size: 20px !important;
+  font-weight: 700;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--cyan) !important;
+  background: rgba(0, 240, 255, 0.04) !important;
+}
+
+.invite-input:focus {
+  box-shadow: var(--cyan-glow) !important;
+  border-color: var(--cyan) !important;
+}
+
+.invite-hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  margin: -6px 0 10px;
+  letter-spacing: 0.6px;
+}
+
+/* 键位对照三联行:键 / 原指令 / 中文 */
+.kv-row3 {
+  display: grid;
+  grid-template-columns: minmax(90px, 1.1fr) minmax(110px, 1fr) minmax(110px, 1.2fr);
+  gap: 8px;
+  padding: 5px 8px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  align-items: baseline;
+}
+
+.kv-row3:nth-child(odd) {
+  background: rgba(0, 240, 255, 0.03);
+}
+
+.kv-key {
+  color: var(--cyan);
+  font-weight: 700;
+}
+
+.kv-key em {
+  font-style: normal;
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 11px;
+  margin-left: 6px;
+}
+
+.kv-cmd {
+  color: var(--text);
+  word-break: break-all;
+}
+
+.kv-zh {
+  color: var(--yellow);
+}
+
+.kv-zh i {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 11px;
+}
+
+.cfg-raw {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  max-height: 300px;
+  overflow: auto;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 8px 0 4px;
+}
+
+.cfg-file h4 .ghost.sm {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+@media (max-width: 600px) {
+  .kv-row3 {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

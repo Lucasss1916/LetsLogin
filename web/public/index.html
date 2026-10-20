@@ -29,16 +29,17 @@
       <p class="auth-switch">还没有账号?<a href="#" id="goto-register" class="auth-link">邀请码注册 →</a></p>
     </form>
 
-    <form id="register-form" class="card auth-card hidden">
+    <form id="register-form" class="card auth-card register-card hidden">
       <div class="auth-brand-wrap">
         <div class="cyber-badge-top">[ INVITE ONLY ACCESS ]</div>
         <h2>邀请码注册</h2>
         <p class="muted">// 输入管理员下发的邀请码开号</p>
       </div>
-      <label><span class="label-txt">邀请码 *</span><input id="reg-invite" required placeholder="XXXX-XXXX-XXXX" autocomplete="off" /></label>
-      <label><span class="label-txt">用户名 * (2-24 位字母/数字/下划线)</span><input id="reg-username" required autocomplete="username" placeholder="USERNAME" /></label>
-      <label><span class="label-txt">密码 * (至少 8 位)</span><input id="reg-password" type="password" required autocomplete="new-password" placeholder="ACCESS KEY" /></label>
-      <label><span class="label-txt">确认密码 *</span><input id="reg-password2" type="password" required autocomplete="new-password" placeholder="REPEAT" /></label>
+      <label><span class="label-txt">邀请码 * <i class="label-en">INVITE CODE</i></span><input id="reg-invite" class="invite-input" required placeholder="XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" /></label>
+      <p class="invite-hint">// 邀请码向管理员索取 · 一码可限次数与有效期</p>
+      <label><span class="label-txt">用户名 * <i class="label-en">USERNAME · 2-24 位字母/数字/下划线</i></span><input id="reg-username" required autocomplete="username" placeholder="USERNAME" /></label>
+      <label><span class="label-txt">密码 * <i class="label-en">ACCESS KEY · 至少 8 位</i></span><input id="reg-password" type="password" required autocomplete="new-password" placeholder="ACCESS KEY" /></label>
+      <label><span class="label-txt">确认密码 * <i class="label-en">CONFIRM</i></span><input id="reg-password2" type="password" required autocomplete="new-password" placeholder="REPEAT" /></label>
       <div id="register-error" class="error hidden"></div>
       <button class="primary" type="submit">CREATE // 注册并进入</button>
       <p class="auth-switch">已有账号?<a href="#" id="goto-login" class="auth-link">← 返回登录</a></p>
