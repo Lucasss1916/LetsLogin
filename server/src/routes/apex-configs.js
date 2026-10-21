@@ -4,8 +4,31 @@ import { pool, audit } from '../db.js'
 import { requireAuth } from '../auth.js'
 
 // Apex 配置分享广场:列表只出摘要,正文(.apexcfg JSON)仅详情接口返回
+// 权限约定:所有已登录用户(普通用户与管理员同等)均可发布配置;删除仅限本人或管理员
 const r = Router()
 r.use(requireAuth)
+
+// 发布限流:每账号每小时 12 次(单容器自托管,内存计数即可);管理员不受限
+const PUBLISH_WINDOW_MS = 60 * 60 * 1000
+const PUBLISH_MAX_PER_WINDOW = 12
+const publishLog = new Map() // userId -> { count, windowStart }
+
+function publishRateLimited(userId) {
+  const now = Date.now()
+  const rec = publishLog.get(userId)
+  if (!rec || now - rec.windowStart > PUBLISH_WINDOW_MS) {
+    publishLog.set(userId, { count: 1, windowStart: now })
+    return false
+  }
+  rec.count += 1
+  // 顺手清理过期窗口记录, 防止 Map 无限膨胀
+  if (publishLog.size > 2000) {
+    for (const [k, v] of publishLog) {
+      if (now - v.windowStart > PUBLISH_WINDOW_MS) publishLog.delete(k)
+    }
+  }
+  return rec.count > PUBLISH_MAX_PER_WINDOW
+}
 
 const MAX_PAYLOAD_BYTES = 512 * 1024      // 入库正文上限(JSON 文本, base64 后配置通常 < 200KB)
 const MAX_DECODED_TOTAL = 32 * 1024 * 1024
@@ -126,8 +149,11 @@ r.get('/:id', async (req, res) => {
   res.json({ config })
 })
 
-// 发布:服务端全量重新校验(格式/文件名/base64/sha256),正文压缩重序列化后入库
+// 发布:任何已登录用户都可发布(无角色门槛);服务端全量重新校验(格式/文件名/base64/sha256),正文压缩重序列化后入库
 r.post('/', async (req, res) => {
+  if (req.user.role !== 'admin' && publishRateLimited(req.user.id)) {
+    return res.status(429).json({ error: `发布过于频繁(每小时最多 ${PUBLISH_MAX_PER_WINDOW} 次), 请稍后再试` })
+  }
   const body = req.body || {}
   const title = (typeof body.title === 'string' ? body.title : '').trim()
   const notes = (typeof body.notes === 'string' ? body.notes : '').trim()
@@ -159,15 +185,18 @@ r.post('/', async (req, res) => {
   res.status(201).json({ id, fileCount: normalized.fileCount })
 })
 
-// 删除:本人或管理员
+// 删除:仅本人或管理员
+// 先校验归属再删除 —— 绝不能先 DELETE 后判权限, 否则越权请求虽返回 403 但数据已被删掉
 r.delete('/:id', async (req, res) => {
   const id = Number(req.params.id)
   if (!Number.isInteger(id)) return res.status(400).json({ error: '无效的 id' })
-  const { rows } = await pool.query('DELETE FROM apex_configs WHERE id = $1 RETURNING id, user_id', [id])
+  const { rows } = await pool.query('SELECT user_id FROM apex_configs WHERE id = $1', [id])
   if (!rows[0]) return res.status(404).json({ error: '配置不存在' })
   if (rows[0].user_id !== req.user.id && req.user.role !== 'admin') {
     return res.status(403).json({ error: '只能删除自己分享的配置' })
   }
+  const del = await pool.query('DELETE FROM apex_configs WHERE id = $1 RETURNING id', [id])
+  if (!del.rows[0]) return res.status(404).json({ error: '配置不存在' })
   await audit(req.user.id, 'apex_config_delete', `apex_config:${id}`)
   res.json({ ok: true })
 })

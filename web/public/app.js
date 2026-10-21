@@ -842,7 +842,8 @@ function renderCfgList() {
     <article class="rotation-card cfg-card">
       <div class="cfg-card-head">
         <strong class="cfg-card-title">${esc(c.title)}</strong>
-        ${(c.user_id === myId || isAdmin) ? `<button type="button" class="ghost sm" data-cfg-del="${c.id}" title="删除">✕</button>` : ''}
+        ${c.user_id === myId ? '<span class="tag green cfg-mine">我发布的</span>' : ''}
+        ${(c.user_id === myId || isAdmin) ? `<button type="button" class="ghost sm cfg-del" data-cfg-del="${c.id}" title="删除">✕</button>` : ''}
       </div>
       <div class="cfg-sub">${esc(c.author)} · ${fmtHM(c.created_at)} · 下载 ${c.downloads} 次</div>
       <div class="cfg-chips">${cfgChips(c).map(t => `<span class="badge">${esc(t)}</span>`).join('')}</div>

@@ -86,6 +86,7 @@ powershell -ExecutionPolicy Bypass -File apex_cfg_tool.ps1 -Action show         
 - 安全性：逐文件 sha256 校验、原子写入、包内文件名防路径穿越；服务端发布时会重新校验 base64/哈希
 - 兼容性：备份 zip 与 `.apexcfg`(format=1) 为统一格式,旧版工具产生的备份仍可恢复
 - 网页「分享广场」支持标题/备注/灵敏度摘要搜索与分页浏览；配置正文仅在点击下载时拉取（列表接口不传 payload）
+- **分享广场权限**:任何已登录账号(普通用户与管理员同等)都可发布配置;删除仅限本人或管理员;普通用户发布限流每小时 12 次(管理员不限);配置正文上限 512KB(解码后总 32MB / 单文件 8MB)
 - 详细设计与性能方案见 [docs/apex-config-design.md](docs/apex-config-design.md)
 
 ## API 一览
@@ -104,8 +105,8 @@ powershell -ExecutionPolicy Bypass -File apex_cfg_tool.ps1 -Action show         
 | GET | `/api/apex/maprotation?platform=PC\|PS4\|X1` | Apex 地图轮换(按平台读不同的池,默认亚服=PC;同平台全球各连接区一致) |
 | GET | `/api/apex/configs` | Apex 配置分享列表(分页/搜索,不含配置正文) |
 | GET | `/api/apex/configs/:id` | 配置详情(含 `.apexcfg` 正文;`?count=1` 计一次下载) |
-| POST | `/api/apex/configs` | 发布配置(服务端全量校验文件名/base64/sha256) |
-| DELETE | `/api/apex/configs/:id` | 删除配置(本人或管理员) |
+| POST | `/api/apex/configs` | 发布配置(任意登录用户;服务端全量校验文件名/base64/sha256;普通用户每小时 12 次) |
+| DELETE | `/api/apex/configs/:id` | 删除配置(本人或管理员;先校验归属再删除) |
 
 ## 目录结构
 

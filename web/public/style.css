@@ -1155,6 +1155,8 @@ button[disabled] {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* 网格项默认 min-width:auto 会被长内容撑宽列, 导致标题/按钮溢出卡片 */
+  min-width: 0;
   backdrop-filter: blur(10px);
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
 }
@@ -1409,9 +1411,28 @@ button[disabled] {
 
 .cfg-card-head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 标题左、作者自身标记紧跟、删除按钮靠最右 */
+.cfg-card-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cfg-mine {
+  flex: 0 0 auto;
+  font-size: 10px;
+  padding: 1px 6px;
+  letter-spacing: 0;
+}
+
+.cfg-del {
+  margin-left: auto;
+  flex: 0 0 auto;
 }
 
 .cfg-card-title {
