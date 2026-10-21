@@ -1425,7 +1425,7 @@ button[disabled] {
 
 .cfg-mine {
   flex: 0 0 auto;
-  font-size: 10px;
+  font-size: 11px;
   padding: 1px 6px;
   letter-spacing: 0;
 }
@@ -1593,7 +1593,7 @@ button[disabled] {
   }
 
   .platform-hint {
-    font-size: 10px;
+    font-size: 11px;
   }
 }
 
@@ -1608,6 +1608,8 @@ button[disabled] {
 }
 
 .auth-link {
+  display: inline-block;
+  padding: 6px 4px;
   color: var(--cyan);
   text-decoration: none;
   letter-spacing: 0.5px;
@@ -1664,10 +1666,6 @@ button[disabled] {
   .table-container {
     overflow-x: auto;
   }
-
-  #invite-table, #audit-table, #user-table {
-    min-width: 560px;
-  }
 }
 
 /* 推算模式醒目提示条 */
@@ -1720,7 +1718,7 @@ button[disabled] {
 }
 
 .ghost.sm.danger {
-  color: var(--red);
+  color: var(--pink);
   border-color: rgba(255, 0, 85, 0.4);
 }
 
@@ -1763,7 +1761,7 @@ button[disabled] {
 .label-en {
   font-style: normal;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 1.5px;
   color: rgba(0, 240, 255, 0.55);
   margin-left: 6px;
@@ -1920,5 +1918,33 @@ button[disabled] {
 
   .kv-head {
     display: none;
+  }
+}
+
+/* ---------- 窄屏表格自适应:长 token 折行 + 密度压缩, 免横向滚动 ---------- */
+/* 桌面也生效:超长对象名(meta/路径)折行, 防止单列把表撑到 700px+ */
+.table td {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .table {
+    min-width: 0;
+  }
+
+  .table th,
+  .table td {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .table button.sm {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .invite-code {
+    font-size: 12px;
+    letter-spacing: 1px;
   }
 }
