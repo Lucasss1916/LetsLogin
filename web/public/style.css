@@ -1948,3 +1948,104 @@ button[disabled] {
     letter-spacing: 1px;
   }
 }
+
+/* ---------- Apex 广场:赛季倒计时卡 + 子标签 ---------- */
+.season-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 22px;
+  margin-bottom: 18px;
+}
+
+.season-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.season-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--cyan);
+  text-shadow: var(--cyan-glow);
+}
+
+.season-head strong {
+  font-family: var(--font-display);
+  font-size: 19px;
+  letter-spacing: 1.5px;
+  color: var(--text-bright);
+}
+
+.season-timers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 32px;
+}
+
+.season-timer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.season-timer .label-txt {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+
+.season-timer strong {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--cyan);
+  text-shadow: var(--cyan-glow);
+  /* 倒计时逐秒变化,等宽数字避免整行左右抖动 */
+  font-variant-numeric: tabular-nums;
+}
+
+.season-bar {
+  margin: 0;
+}
+
+/* 具体时刻:窄屏自动堆叠,不挤压 */
+.season-dates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px 24px;
+  margin: 0;
+}
+
+.season-dates dt {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  margin-bottom: 2px;
+}
+
+.season-dates dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text);
+}
+
+.season-note {
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.plaza-tabs {
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(0, 240, 255, 0.12);
+}
+
+.cfg-list-head { margin-top: 6px; }

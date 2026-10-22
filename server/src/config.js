@@ -6,6 +6,12 @@ export const config = {
   adminInitialPassword: process.env.ADMIN_INITIAL_PASSWORD || 'admin123',
   sessionTimeoutMinutes: Number(process.env.SESSION_TIMEOUT_MINUTES || 30),
   apexApiKey: process.env.APEX_API_KEY || '',
+  // Apex 赛季倒计时(可选精确校准;不配则按社区口径推算,UI 会标注"推算")
+  apexSeasonName: process.env.APEX_SEASON_NAME || '',
+  apexSeasonSplit: Number(process.env.APEX_SEASON_SPLIT || 0),
+  apexSeasonStartsAt: process.env.APEX_SEASON_STARTS_AT || '',
+  apexSeasonSplitEndsAt: process.env.APEX_SEASON_SPLIT_ENDS_AT || '',
+  apexSeasonEndsAt: process.env.APEX_SEASON_ENDS_AT || '',
   // SMTP 发信(可选):配置后管理员生成邀请码可直发邮箱;推荐 465(SSL)/587(TLS)
   smtpHost: process.env.SMTP_HOST || '',
   smtpPort: Number(process.env.SMTP_PORT || 465),

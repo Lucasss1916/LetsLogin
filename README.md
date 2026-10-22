@@ -46,6 +46,7 @@ open http://localhost:8080
 | `ADMIN_INITIAL_PASSWORD` | 否 | 初始管理员密码,默认 `admin123` |
 | `PORT` / `DATABASE_URL` / `SESSION_TIMEOUT_MINUTES` | 否 | 见 `server/src/config.js` |
 | `APEX_API_KEY` | 否 | apexstatus 免费 key([apexlegendsstatus.com](https://apexlegendsstatus.com) 注册),用于 Apex 地图轮换页的官方实时数据;未配置时按标准轮换周期本地推算(赛季更替需更新 `server/src/apex.js` 中的地图池) |
+| `APEX_SEASON_*` | 否 | Apex 广场赛季倒计时的精确校准:`APEX_SEASON_NAME` + `APEX_SEASON_ENDS_AT` 两项都填才生效,另可选 `_SPLIT` / `_STARTS_AT` / `_SPLIT_ENDS_AT`;未配置时按社区口径推算(90 天两段制),页面会标注「推算」 |
 
 ## 常用命令
 

@@ -126,12 +126,13 @@ function renderUser() {
 
 // 统一面板切换:accounts(账号)/ users(用户管理,仅管理员)/ apex(地图轮换)
 function setPanel(name) {
-  ;['panel-accounts', 'panel-users', 'panel-apex', 'panel-apexcfg'].forEach(hide)
+  ;['panel-accounts', 'panel-users', 'panel-apexplaza'].forEach(hide)
   show('panel-' + name)
   const isAdmin = state.user?.role === 'admin'
   $('btn-users').classList.toggle('hidden', !(isAdmin && name === 'accounts'))
   $('btn-back-accounts').classList.toggle('hidden', name === 'accounts')
-  if (name === 'apex') startRotation(); else stopRotation()
+  if (name === 'apexplaza') startSeason()
+  else { stopSeason(); stopRotation() }
 }
 
 async function bootApp() {
@@ -588,6 +589,82 @@ function tickRotation() {
   }
 }
 
+// ---------- Apex 赛季倒计时 ----------
+// 目标时刻是绝对时间戳,直接用本地时钟即可(与轮换的快照剩余不同)
+let seasonData = null
+let seasonTimer = null
+
+async function loadSeason() {
+  try {
+    seasonData = await api('GET', '/apex/season')
+    renderSeason()
+  } catch {
+    $('season-note').textContent = '赛季数据加载失败,稍后进入广场会自动重试'
+  }
+}
+
+const seasonTargetMs = (key) => seasonData?.season?.[key] ? Date.parse(seasonData.season[key]) : null
+
+function fmtSeasonLeft(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  const d = Math.floor(s / 86400)
+  const pad = (n) => String(n).padStart(2, '0')
+  return d > 0
+    ? `${d} 天 ${pad(Math.floor((s % 86400) / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`
+    : `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`
+}
+
+// 具体时刻按浏览器本地时区展示(服务端给的是 ISO UTC)
+const fmtSeasonAt = (iso) => iso
+  ? new Date(iso).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+  : '未知'
+
+function renderSeason() {
+  const s = seasonData.season
+  $('season-name').textContent = s.name
+  $('season-dates').innerHTML = [
+    ['赛季开始', s.startsAt],
+    ['本段结束', s.splitEndsAt],
+    ['赛季结束', s.endsAt],
+  ].map(([label, iso]) => `<div><dt>${label}</dt><dd>${esc(fmtSeasonAt(iso))}</dd></div>`).join('')
+  const tag = $('season-split-tag')
+  tag.classList.toggle('hidden', !s.split)
+  if (s.split) tag.textContent = `第 ${s.split} 段`
+  $('season-note').textContent = seasonData.source === 'config'
+    ? '数据来自 .env 赛季配置(精确)'
+    : '按社区口径推算(90 天一赛季、两段制,可能与实际有漂移)。精确校准:在 .env 配置 APEX_SEASON_NAME / APEX_SEASON_STARTS_AT / APEX_SEASON_ENDS_AT / APEX_SEASON_SPLIT / APEX_SEASON_SPLIT_ENDS_AT 后重启服务。'
+  tickSeason()
+}
+
+function tickSeason() {
+  if (!seasonData) return
+  const now = Date.now()
+  const splitEnds = seasonTargetMs('splitEndsAt')
+  const ends = seasonTargetMs('endsAt')
+  $('season-split-left').textContent = splitEnds == null
+    ? '—'
+    : splitEnds <= now ? '段间切换中…' : fmtSeasonLeft(splitEnds - now)
+  $('season-left').textContent = ends == null
+    ? '—'
+    : ends <= now ? '赛季已结束,请更新 .env 配置' : fmtSeasonLeft(ends - now)
+  if (seasonData.season.startsAt && ends) {
+    const span = ends - Date.parse(seasonData.season.startsAt)
+    const pct = span > 0 ? Math.min(100, Math.max(0, ((now - Date.parse(seasonData.season.startsAt)) / span) * 100)) : 0
+    $('season-bar-fill').style.width = pct.toFixed(1) + '%'
+  }
+}
+
+function startSeason() {
+  loadSeason()
+  clearInterval(seasonTimer)
+  seasonTimer = setInterval(tickSeason, 1000)
+}
+
+function stopSeason() {
+  clearInterval(seasonTimer)
+  seasonTimer = null
+}
+
 // ---------- 管理后台(用户 / 邀请码 / 审计日志) ----------
 let adminTab = 'users'
 
@@ -744,7 +821,6 @@ $('btn-users').addEventListener('click', async () => {
   switchAdminTab('users') // 进入后台重置到默认子面板并加载
 })
 $('btn-back-accounts').addEventListener('click', () => setPanel('accounts'))
-$('btn-apex').addEventListener('click', () => setPanel('apex'))
 $('btn-new-user').addEventListener('click', () => {
   $('user-form').reset(); $('u-id').value = ''; $('user-title').textContent = '新增用户'
   $('u-username-row').classList.remove('hidden'); $('u-password').setAttribute('required', '')
@@ -914,11 +990,22 @@ function cfgSummarize(data) {
   return parts.join(' · ')
 }
 
-// 面板懒加载:首次点开才请求列表, 平时零开销
-$('btn-apexcfg').addEventListener('click', () => {
-  setPanel('apexcfg')
-  loadCfgConfigs(true)
+// Apex 广场入口:赛季卡常驻,轮换/配置双标签懒加载
+$('btn-apexplaza').addEventListener('click', () => {
+  setPanel('apexplaza')
+  switchPlazaTab('rotation')
 })
+
+function switchPlazaTab(tab) {
+  document.querySelectorAll('[data-plaza-tab]').forEach(b => b.classList.toggle('active', b.dataset.plazaTab === tab))
+  $('plaza-rotation').classList.toggle('hidden', tab !== 'rotation')
+  $('plaza-cfg').classList.toggle('hidden', tab !== 'cfg')
+  if (tab === 'rotation') startRotation(); else stopRotation()
+  if (tab === 'cfg') loadCfgConfigs(true).catch(() => {})
+}
+
+document.querySelectorAll('[data-plaza-tab]').forEach(b =>
+  b.addEventListener('click', () => switchPlazaTab(b.dataset.plazaTab)))
 
 $('cfg-list').addEventListener('click', (e) => {
   const dl = e.target.closest('[data-cfg-dl]')

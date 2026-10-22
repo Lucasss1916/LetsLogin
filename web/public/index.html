@@ -70,8 +70,7 @@
       </div>
       <div class="top-right">
         <span id="whoami" class="muted">…</span>
-        <button id="btn-apex" class="ghost">Apex 轮换</button>
-        <button id="btn-apexcfg" class="ghost">Apex 配置</button>
+        <button id="btn-apexplaza" class="ghost">Apex 广场</button>
       <button id="btn-users" class="ghost hidden">管理后台</button>
         <button id="btn-back-accounts" class="ghost hidden">← 返回账号</button>
         <button id="btn-logout" class="ghost">退出</button>
@@ -131,78 +130,107 @@
       </div>
     </section>
 
-    <section id="panel-apex" class="hidden">
+    <!-- Apex 广场:赛季倒计时 + 地图轮换 + 配置分享 -->
+    <section id="panel-apexplaza" class="hidden">
       <div class="panel-head">
-        <h2>Apex 地图轮换</h2>
+        <h2>Apex 广场</h2>
         <span id="apex-source" class="muted"></span>
       </div>
-      <div class="platform-picker">
-        <div class="platform-chips" id="platform-chips">
-          <button type="button" class="platform-chip active" data-platform="PC">亚服 · PC</button>
-          <button type="button" class="platform-chip" data-platform="PS4">PlayStation</button>
-          <button type="button" class="platform-chip" data-platform="X1">Xbox</button>
-        </div>
-        <span class="platform-hint">按平台分池取数;同平台全球各连接区(东京/法兰克福等)轮换一致,亚服默认为 PC</span>
-      </div>
-      <div id="rotation-grid" class="rotation-grid"></div>
-      <div id="apex-fallback-note" class="fallback-note hidden">⚠️ 当前为本地推算(社区口径,可能与实际有偏差,且无地图配图)。官方实时精准轮换:在 .env 配置免费的 <code>APEX_API_KEY</code>(apexlegendsstatus.com 注册)后重启服务即可自动切换。</div>
-      <div id="apex-error" class="error hidden"></div>
-    </section>
 
-    <!-- Apex 配置工具(备份/恢复/分享) -->
-    <section id="panel-apexcfg" class="hidden">
-      <div class="panel-head">
-        <h2>Apex 配置工具</h2>
-        <span class="cfg-dl-group">
+      <div class="card season-card" id="season-card">
+        <div class="season-head">
+          <span class="season-label">SEASON // 赛季倒计时</span>
+          <strong id="season-name">加载中…</strong>
+          <span class="tag blue hidden" id="season-split-tag"></span>
+        </div>
+        <div class="season-timers">
+          <div class="season-timer">
+            <span class="label-txt">本段剩余</span>
+            <strong id="season-split-left">—</strong>
+          </div>
+          <div class="season-timer">
+            <span class="label-txt">赛季剩余</span>
+            <strong id="season-left">—</strong>
+          </div>
+        </div>
+        <div class="rotation-bar season-bar"><div class="rotation-bar-fill" id="season-bar-fill" style="width:0%"></div></div>
+        <dl id="season-dates" class="season-dates"></dl>
+        <div id="season-note" class="muted season-note"></div>
+      </div>
+
+      <div class="admin-tabs plaza-tabs">
+        <button type="button" class="platform-chip active" data-plaza-tab="rotation">地图轮换</button>
+        <button type="button" class="platform-chip" data-plaza-tab="cfg">配置分享</button>
+      </div>
+
+      <div id="plaza-rotation">
+        <div class="platform-picker">
+          <div class="platform-chips" id="platform-chips">
+            <button type="button" class="platform-chip active" data-platform="PC">亚服 · PC</button>
+            <button type="button" class="platform-chip" data-platform="PS4">PlayStation</button>
+            <button type="button" class="platform-chip" data-platform="X1">Xbox</button>
+          </div>
+          <span class="platform-hint">按平台分池取数;同平台全球各连接区(东京/法兰克福等)轮换一致,亚服默认为 PC</span>
+        </div>
+        <div id="rotation-grid" class="rotation-grid"></div>
+        <div id="apex-fallback-note" class="fallback-note hidden">⚠️ 当前为本地推算(社区口径,可能与实际有偏差,且无地图配图)。官方实时精准轮换:在 .env 配置免费的 <code>APEX_API_KEY</code>(apexlegendsstatus.com 注册)后重启服务即可自动切换。</div>
+        <div id="apex-error" class="error hidden"></div>
+      </div>
+
+      <div id="plaza-cfg" class="hidden">
+        <div class="panel-head cfg-square-head">
+          <h3>配置分享</h3>
+          <span class="cfg-dl-group">
             <a class="primary cfg-dl-anchor" href="https://github.com/Lucasss1916/LetsLogin/releases/latest/download/ApexConfigTool-win-x64.zip" download>⇩ 完整 exe 图形版 (轻量 WebView2, 推荐)</a>
             <a class="cfg-dl-anchor" href="https://github.com/Lucasss1916/LetsLogin/releases/latest/download/ApexCfgTool-win.zip" download>⇩ 控制台版 (bat → PowerShell)</a>
             <a class="ghost cfg-dl-anchor" href="https://github.com/Lucasss1916/LetsLogin/releases/latest/download/apex_cfg_tool.py" download>⇩ Python 脚本 (单文件)</a>
           </span>
-      </div>
-
-      <div class="cfg-grid">
-        <div class="card cfg-usage">
-          <h3>备份 / 恢复(本机)</h3>
-          <ol class="cfg-steps">
-            <li>下载并解压 <code>ApexConfigTool-win-x64.zip</code>,运行其中的 <code>ApexConfigTool-win_x64.exe</code>(图形界面,仅 ~2MB,Win10/11 自带 WebView2)</li>
-            <li>本地配置页可<b>筛选浏览全部键值</b>(灵敏度/键位/画质逐行列出),一键「立即备份」;内置「分享广场」可登录后发布/一键应用他人配置</li>
-            <li>备份页选中历史备份可回滚;恢复/导入前自动生成安全包,可随时再恢复</li>
-            <li>分享页把配置导出为 <code>.apexcfg</code> 发布;导入他人的配置同理</li>
-            <li>没有图形环境? 三个补充任选: <code>ApexCfgTool-win.zip</code>(双击 <code>Start.bat</code> 进菜单)或单文件 <code>apex_cfg_tool.py</code>(需 Python 3.8+)</li>
-          </ol>
-          <p class="muted">工具只读写 <code>Saved Games\Respawn\Apex\local</code> 下的 <code>*.cfg / *.txt</code> 配置文件(灵敏度、键位、画质);每次恢复前会自动给当前状态打安全包,可随时再恢复回去。</p>
         </div>
 
-        <div class="card cfg-publish">
-          <h3>分享我的配置</h3>
-          <form id="cfg-publish-form">
-            <label><span class="label-txt">配置文件 (.apexcfg)</span>
-              <input id="cfg-file" type="file" accept=".apexcfg,.json,application/json" required />
-            </label>
-            <div id="cfg-file-summary" class="cfg-summary hidden"></div>
-            <label><span class="label-txt">标题 *</span>
-              <input id="cfg-title" maxlength="60" required placeholder="如 1.8 灵敏度 · 平底锅键位" />
-            </label>
-            <label><span class="label-txt">备注</span>
-              <textarea id="cfg-notes" rows="2" maxlength="300" placeholder="灵敏度 / 键位 / 画质说明…"></textarea>
-            </label>
-            <div id="cfg-publish-error" class="error hidden"></div>
-            <button class="primary" type="submit">发布到分享广场</button>
-          </form>
-          <p class="muted"><b>任何登录账号都可以发布</b>(无需管理员权限);删除仅限本人或管理员。先在工具菜单「4 导出分享文件」生成 <code>.apexcfg</code>,再在这里上传。别人下载后在工具菜单「5 导入分享文件」一键应用。</p>
-        </div>
-      </div>
+        <div class="cfg-grid">
+          <div class="card cfg-usage">
+            <h3>备份 / 恢复(本机)</h3>
+            <ol class="cfg-steps">
+              <li>下载并解压 <code>ApexConfigTool-win-x64.zip</code>,运行其中的 <code>ApexConfigTool-win_x64.exe</code>(图形界面,仅 ~2MB,Win10/11 自带 WebView2)</li>
+              <li>本地配置页可<b>筛选浏览全部键值</b>(灵敏度/键位/画质逐行列出),一键「立即备份」;内置「分享广场」可登录后发布/一键应用他人配置</li>
+              <li>备份页选中历史备份可回滚;恢复/导入前自动生成安全包,可随时再恢复</li>
+              <li>分享页把配置导出为 <code>.apexcfg</code> 发布;导入他人的配置同理</li>
+              <li>没有图形环境? 三个补充任选: <code>ApexCfgTool-win.zip</code>(双击 <code>Start.bat</code> 进菜单)或单文件 <code>apex_cfg_tool.py</code>(需 Python 3.8+)</li>
+            </ol>
+            <p class="muted">工具只读写 <code>Saved Games\Respawn\Apex\local</code> 下的 <code>*.cfg / *.txt</code> 配置文件(灵敏度、键位、画质);每次恢复前会自动给当前状态打安全包,可随时再恢复回去。</p>
+          </div>
 
-      <div class="panel-head cfg-square-head">
-        <h3>分享广场</h3>
-        <input id="cfg-search" class="cfg-search" autocomplete="off" placeholder="搜索标题 / 备注 / 灵敏度…" />
+          <div class="card cfg-publish">
+            <h3>分享我的配置</h3>
+            <form id="cfg-publish-form">
+              <label><span class="label-txt">配置文件 (.apexcfg)</span>
+                <input id="cfg-file" type="file" accept=".apexcfg,.json,application/json" required />
+              </label>
+              <div id="cfg-file-summary" class="cfg-summary hidden"></div>
+              <label><span class="label-txt">标题 *</span>
+                <input id="cfg-title" maxlength="60" required placeholder="如 1.8 灵敏度 · 平底锅键位" />
+              </label>
+              <label><span class="label-txt">备注</span>
+                <textarea id="cfg-notes" rows="2" maxlength="300" placeholder="灵敏度 / 键位 / 画质说明…"></textarea>
+              </label>
+              <div id="cfg-publish-error" class="error hidden"></div>
+              <button class="primary" type="submit">发布到分享广场</button>
+            </form>
+            <p class="muted"><b>任何登录账号都可以发布</b>(无需管理员权限);删除仅限本人或管理员。先在工具菜单「4 导出分享文件」生成 <code>.apexcfg</code>,再在这里上传。别人下载后在工具菜单「5 导入分享文件」一键应用。</p>
+          </div>
+        </div>
+
+        <div class="panel-head cfg-list-head">
+          <h3>分享广场</h3>
+          <input id="cfg-search" class="cfg-search" autocomplete="off" placeholder="搜索标题 / 备注 / 灵敏度…" />
+        </div>
+        <div id="cfg-list" class="rotation-grid"></div>
+        <div class="cfg-more-row">
+          <span id="cfg-empty" class="muted hidden"></span>
+          <button id="cfg-more" class="ghost hidden">加载更多</button>
+        </div>
+        <div id="cfg-error" class="error hidden"></div>
       </div>
-      <div id="cfg-list" class="rotation-grid"></div>
-      <div class="cfg-more-row">
-        <span id="cfg-empty" class="muted hidden"></span>
-        <button id="cfg-more" class="ghost hidden">加载更多</button>
-      </div>
-      <div id="cfg-error" class="error hidden"></div>
     </section>
   </main>
 

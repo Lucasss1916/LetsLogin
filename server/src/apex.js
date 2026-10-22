@@ -127,3 +127,51 @@ export async function getMapRotation(rawPlatform = DEFAULT_PLATFORM) {
   // 兜底推算:各平台同池;platform 不影响计算
   return { source: 'fallback', fetchedAtMs: nowMs, platform, modes: fallbackRotation(nowMs) }
 }
+
+// ————————————————————————————————————————————————
+// Apex 赛季倒计时
+//   1) .env 显式配置(APEX_SEASON_NAME + APEX_SEASON_ENDS_AT 必填)→ 权威精确
+//   2) 未配置 → 按社区口径推算:Season 23 起点 2024-02-13、90 天一赛季、
+//      一赛季两段各 45 天(存在短赛季漂移,UI 明示"推算")
+// 统一输出:{ source, fetchedAtMs, season: { name, split, startsAt, splitEndsAt, endsAt } }
+// 时间均为 ISO 字符串;startsAt/splitEndsAt 允许为 null(config 模式下可不配)
+// ————————————————————————————————————————————————
+const SEASON_EST_ANCHOR_MS = Date.parse('2024-02-13T17:00:00Z') // Season 23 上线时刻
+const SEASON_EST_DAYS = 90
+const SEASON_EST_SPLITS = 2
+
+function estimateSeason(nowMs) {
+  const totalMs = SEASON_EST_DAYS * 86400 * 1000
+  const index = Math.max(0, Math.floor((nowMs - SEASON_EST_ANCHOR_MS) / totalMs))
+  const startsAtMs = SEASON_EST_ANCHOR_MS + index * totalMs
+  const splitLenMs = totalMs / SEASON_EST_SPLITS
+  const split = Math.min(SEASON_EST_SPLITS, Math.floor((nowMs - startsAtMs) / splitLenMs) + 1)
+  return {
+    name: `Season ${23 + index}`,
+    split,
+    startsAt: new Date(startsAtMs).toISOString(),
+    splitEndsAt: new Date(startsAtMs + split * splitLenMs).toISOString(),
+    endsAt: new Date(startsAtMs + totalMs).toISOString(),
+  }
+}
+
+export function getSeasonInfo(nowMs = Date.now()) {
+  const cfgName = config.apexSeasonName
+  const endsAtMs = Date.parse(config.apexSeasonEndsAt || '')
+  if (cfgName && Number.isFinite(endsAtMs)) {
+    const startsAtMs = Date.parse(config.apexSeasonStartsAt || '')
+    const splitEndsAtMs = Date.parse(config.apexSeasonSplitEndsAt || '')
+    return {
+      source: 'config',
+      fetchedAtMs: nowMs,
+      season: {
+        name: cfgName,
+        split: config.apexSeasonSplit || null,
+        startsAt: Number.isFinite(startsAtMs) ? new Date(startsAtMs).toISOString() : null,
+        splitEndsAt: Number.isFinite(splitEndsAtMs) ? new Date(splitEndsAtMs).toISOString() : null,
+        endsAt: new Date(endsAtMs).toISOString(),
+      },
+    }
+  }
+  return { source: 'est', fetchedAtMs: nowMs, season: estimateSeason(nowMs) }
+}

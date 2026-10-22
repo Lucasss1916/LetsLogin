@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../auth.js'
-import { getMapRotation } from '../apex.js'
+import { getMapRotation, getSeasonInfo } from '../apex.js'
 
 const r = Router()
 r.use(requireAuth)
@@ -12,6 +12,11 @@ r.get('/maprotation', async (req, res) => {
   } catch (err) {
     res.status(502).json({ error: '获取 Apex 地图轮换失败:' + err.message })
   }
+})
+
+// Apex 赛季倒计时(.env 配置 APEX_SEASON_* 校准;未配置按社区口径推算)
+r.get('/season', (req, res) => {
+  res.json(getSeasonInfo())
 })
 
 export default r
