@@ -29,6 +29,7 @@ Object.assign(config, {
   apexSeasonStartsAt: '2026-10-01T09:00:00Z',
   apexSeasonSplitEndsAt: '2026-11-15T09:00:00Z',
   apexSeasonEndsAt: '2026-12-30T09:00:00Z',
+  apexSeasonSource: 'EA 公告 · 2026-10-23 核对',
 })
 const cfg = getSeasonInfo(Date.parse('2026-10-22T00:00:00Z'))
 assert.equal(cfg.source, 'config')
@@ -36,6 +37,7 @@ assert.equal(cfg.season.name, 'Season 99')
 assert.equal(cfg.season.split, 2)
 assert.equal(cfg.season.endsAt, '2026-12-30T09:00:00.000Z')
 assert.equal(cfg.season.splitEndsAt, '2026-11-15T09:00:00.000Z')
+assert.equal(cfg.season.sourceNote, 'EA 公告 · 2026-10-23 核对')
 
 // 结束时间缺失/不可解析时必须退回推算,不能把 NaN 当倒计时目标发给前端
 config.apexSeasonEndsAt = '不是时间'

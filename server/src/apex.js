@@ -170,6 +170,7 @@ export function getSeasonInfo(nowMs = Date.now()) {
         startsAt: Number.isFinite(startsAtMs) ? new Date(startsAtMs).toISOString() : null,
         splitEndsAt: Number.isFinite(splitEndsAtMs) ? new Date(splitEndsAtMs).toISOString() : null,
         endsAt: new Date(endsAtMs).toISOString(),
+        sourceNote: config.apexSeasonSource || null,
       },
     }
   }

@@ -12,6 +12,8 @@ export const config = {
   apexSeasonStartsAt: process.env.APEX_SEASON_STARTS_AT || '',
   apexSeasonSplitEndsAt: process.env.APEX_SEASON_SPLIT_ENDS_AT || '',
   apexSeasonEndsAt: process.env.APEX_SEASON_ENDS_AT || '',
+  // 这组时间是谁给的 / 何时核对的,直接展示在赛季卡上,免得过期了没人知道该找谁对
+  apexSeasonSource: process.env.APEX_SEASON_SOURCE || '',
   // SMTP 发信(可选):配置后管理员生成邀请码可直发邮箱;推荐 465(SSL)/587(TLS)
   smtpHost: process.env.SMTP_HOST || '',
   smtpPort: Number(process.env.SMTP_PORT || 465),

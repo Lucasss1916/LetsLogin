@@ -624,15 +624,18 @@ function renderSeason() {
   $('season-name').textContent = s.name
   $('season-dates').innerHTML = [
     ['赛季开始', s.startsAt],
-    ['本段结束', s.splitEndsAt],
+    ['本段结束', s.splitEndsAt === s.endsAt ? null : s.splitEndsAt],
     ['赛季结束', s.endsAt],
-  ].map(([label, iso]) => `<div><dt>${label}</dt><dd>${esc(fmtSeasonAt(iso))}</dd></div>`).join('')
+  ].filter(([, iso]) => iso)
+    .map(([label, iso]) => `<div><dt>${label}</dt><dd>${esc(fmtSeasonAt(iso))}</dd></div>`).join('')
   const tag = $('season-split-tag')
   tag.classList.toggle('hidden', !s.split)
   if (s.split) tag.textContent = `第 ${s.split} 段`
+  // 最后一段的段末就是赛季末, 两个倒计时会一模一样, 藏掉免得看着像渲染重复
+  $('season-split-timer').classList.toggle('hidden', s.splitEndsAt === s.endsAt)
   $('season-note').textContent = seasonData.source === 'config'
-    ? '数据来自 .env 赛季配置(精确)'
-    : '按社区口径推算(90 天一赛季、两段制,可能与实际有漂移)。精确校准:在 .env 配置 APEX_SEASON_NAME / APEX_SEASON_STARTS_AT / APEX_SEASON_ENDS_AT / APEX_SEASON_SPLIT / APEX_SEASON_SPLIT_ENDS_AT 后重启服务。'
+    ? `数据来源:${s.sourceNote || '.env 赛季配置(未填 APEX_SEASON_SOURCE)'}`
+    : '按社区口径推算(90 天一赛季、两段制,可能与实际有漂移)。精确校准:在 .env 配置 APEX_SEASON_NAME / APEX_SEASON_STARTS_AT / APEX_SEASON_ENDS_AT / APEX_SEASON_SPLIT / APEX_SEASON_SPLIT_ENDS_AT / APEX_SEASON_SOURCE 后重启服务。'
   tickSeason()
 }
 
